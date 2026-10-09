@@ -14,7 +14,7 @@ import org.junit.Test;
 
 /**
  * Expected columns are worked out by hand from GEOtop's rules with the default
- * parameters: m = 5 kg m-2, 4 bottom cells, elastic cells at indices 4 and 5,
+ * parameters: W_c = 5 kg m-2, 4 bottom cells, elastic cells at indices 4 and 5,
  * 4 top cells, 10 cells at most.
  */
 public class MassCriterionRestratificationTest {
@@ -137,7 +137,7 @@ public class MassCriterionRestratificationTest {
 		Restratified out = POLICY.apply(in);
 		// the wet cell (no ice) joins the cold one; the merged 10.3 kg top cell then grows a cell
 		// at equilibrium (about -0.27 degC) a liquid fraction of ~1e-9 remains: the split leaves
-		// exactly m of ice below, with its share of that liquid
+		// exactly W_c of ice below, with its share of that liquid
 		assertEquals(2, out.cells().size());
 		assertEquals(5.0, out.cells().get(0).iceMass(), 1e-12);
 		assertEquals(10.3, SnowColumn.totalMass(out.cells()), 1e-12);

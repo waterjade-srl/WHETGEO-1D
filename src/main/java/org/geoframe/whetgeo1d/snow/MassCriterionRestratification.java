@@ -30,15 +30,15 @@ import java.util.Optional;
  * 1f1fc5af), 0-based and on {@link SnowCell}.
  *
  * <p>
- * With m the target ice mass per cell ({@code max_weq_snow}) and W the total
- * mass of the pack:
+ * With W_c the target ice mass per cell ({@code max_weq_snow}, kg m-2) and SWE
+ * the total mass of the pack:
  * <ol>
- * <li>W &lt; 10⁻⁶ m: the pack vanishes;</li>
- * <li>W &lt; 0.1 m: all cells are merged into one;</li>
- * <li>otherwise: cells with less than 0.1 m of ice are merged with a neighbour;
- * a top cell with more than 1.1 m of ice is split, leaving m below and the rest
+ * <li>SWE &lt; 10⁻⁶ W_c: the pack vanishes;</li>
+ * <li>SWE &lt; 0.1 W_c: all cells are merged into one;</li>
+ * <li>otherwise: cells with less than 0.1 W_c of ice are merged with a neighbour;
+ * a top cell with more than 1.1 W_c of ice is split, leaving W_c below and the rest
  * on top (when the column is full, the lightest pair of elastic cells is merged
- * first); elastic cells with more than 2 m of ice are split, m going on top,
+ * first); elastic cells with more than 2 W_c of ice are split, W_c going on top,
  * while there is room.</li>
  * </ol>
  *
@@ -61,16 +61,16 @@ import java.util.Optional;
  */
 public final class MassCriterionRestratification implements RestratificationPolicy {
 
-	/** GEOtop {@code simpl_snow}: fraction of m below which a cell is merged. */
+	/** GEOtop {@code simpl_snow}: fraction of W_c below which a cell is merged. */
 	public static final double SMALL_CELL_FRACTION = 0.1;
 
-	/** GEOtop {@code no_snow}: fraction of m below which the pack vanishes. */
+	/** GEOtop {@code no_snow}: fraction of W_c below which the pack vanishes. */
 	public static final double VANISHING_FRACTION = 1e-6;
 
 	/**
 	 * Parameters of the criterion.
 	 *
-	 * @param targetCellIce ice mass per cell m [kg m-2] ({@code max_weq_snow})
+	 * @param targetCellIce ice mass per cell W_c [kg m-2] ({@code max_weq_snow})
 	 * @param bottomIce     ice mass held by the fixed bottom cells [kg m-2]
 	 *                      ({@code SWE_bottom})
 	 * @param topIce        ice mass held by the fixed top cells [kg m-2]
@@ -92,7 +92,7 @@ public final class MassCriterionRestratification implements RestratificationPoli
 			}
 		}
 
-		/** GEOtop 3.0 defaults: m = 5 kg m-2, 20 + 20 kg m-2, 2 elastic cells. */
+		/** GEOtop 3.0 defaults: W_c = 5 kg m-2, 20 + 20 kg m-2, 2 elastic cells. */
 		public static Parameters geotopDefaults() {
 			return new Parameters(5.0, 20.0, 20.0, 2);
 		}
@@ -130,10 +130,10 @@ public final class MassCriterionRestratification implements RestratificationPoli
 		if (work.cells.isEmpty()) {
 			return work.result(Optional.empty());
 		}
-		double m = parameters.targetCellIce();
+		double cellIce = parameters.targetCellIce();
 		double total = SnowColumn.totalMass(work.cells);
 
-		if (total < VANISHING_FRACTION * m) {
+		if (total < VANISHING_FRACTION * cellIce) {
 			SnowCell released = work.cells.get(0);
 			for (int i = 1; i < work.cells.size(); i++) {
 				released = released.merge(work.cells.get(i));
@@ -143,16 +143,16 @@ public final class MassCriterionRestratification implements RestratificationPoli
 			return work.result(Optional.of(released));
 		}
 
-		if (total < SMALL_CELL_FRACTION * m) {
+		if (total < SMALL_CELL_FRACTION * cellIce) {
 			while (work.cells.size() > 1) {
 				work.mergeIntoLower(work.cells.size() - 1);
 			}
 			return work.result(Optional.empty());
 		}
 
-		removeSmallCells(work, m);
-		splitTopCell(work, m);
-		splitElasticCells(work, m);
+		removeSmallCells(work, cellIce);
+		splitTopCell(work, cellIce);
+		splitElasticCells(work, cellIce);
 		return work.result(Optional.empty());
 	}
 
@@ -161,13 +161,13 @@ public final class MassCriterionRestratification implements RestratificationPoli
 	 * little ice into its upper neighbour (into the lower one for the top cell),
 	 * repeated until a scan finds nothing, at most maxCells + 1 times.
 	 */
-	private void removeSmallCells(Work work, double m) {
+	private void removeSmallCells(Work work, double cellIce) {
 		int passes = 0;
 		boolean merged;
 		do {
 			merged = false;
 			for (int i = 0; i < work.cells.size() && work.cells.size() > 1; i++) {
-				if (work.cells.get(i).iceMass() < SMALL_CELL_FRACTION * m) {
+				if (work.cells.get(i).iceMass() < SMALL_CELL_FRACTION * cellIce) {
 					if (i == work.cells.size() - 1) {
 						work.mergeIntoLower(i);
 					} else {
@@ -181,10 +181,10 @@ public final class MassCriterionRestratification implements RestratificationPoli
 	}
 
 	/** GEOtop "add new layer": one new cell per call on a heavy top cell. */
-	private void splitTopCell(Work work, double m) {
+	private void splitTopCell(Work work, double cellIce) {
 		int top = work.cells.size() - 1;
 		SnowCell topCell = work.cells.get(top);
-		if (!(topCell.iceMass() > m * (1.0 + SMALL_CELL_FRACTION))) {
+		if (!(topCell.iceMass() > cellIce * (1.0 + SMALL_CELL_FRACTION))) {
 			return;
 		}
 		if (work.cells.size() == parameters.maxCells()) {
@@ -192,7 +192,7 @@ public final class MassCriterionRestratification implements RestratificationPoli
 			top = work.cells.size() - 1;
 			topCell = work.cells.get(top);
 		}
-		double lowerFraction = m / topCell.iceMass();
+		double lowerFraction = cellIce / topCell.iceMass();
 		work.split(top, lowerFraction);
 	}
 
@@ -221,18 +221,18 @@ public final class MassCriterionRestratification implements RestratificationPoli
 
 	/**
 	 * GEOtop "split layers": scanning the elastic cells from the top down, the
-	 * first one with more than 2 m of ice gives m to a new cell above it; the scan
+	 * first one with more than 2 W_c of ice gives W_c to a new cell above it; the scan
 	 * restarts until no cell splits or the column is full.
 	 */
-	private void splitElasticCells(Work work, double m) {
+	private void splitElasticCells(Work work, double cellIce) {
 		int first = parameters.bottomCells();
 		boolean split = true;
 		while (split && work.cells.size() < parameters.maxCells()) {
 			split = false;
 			for (int e = first + parameters.elasticCells() - 1; e >= first; e--) {
-				if (e < work.cells.size() && work.cells.get(e).iceMass() > 2.0 * m) {
+				if (e < work.cells.size() && work.cells.get(e).iceMass() > 2.0 * cellIce) {
 					SnowCell cell = work.cells.get(e);
-					work.split(e, 1.0 - m / cell.iceMass());
+					work.split(e, 1.0 - cellIce / cell.iceMass());
 					split = true;
 					break;
 				}
