@@ -37,6 +37,7 @@ import org.geoframe.whetgeo1d.core.derivedquantities.ComputeQuantitiesHeatDiffus
 import org.geoframe.whetgeo1d.core.finitevolume.HeatDiffusionWithSurfaceEnergyBalance1DKernel;
 import org.geoframe.whetgeo1d.core.state.WGGeometry;
 import org.geoframe.whetgeo1d.core.state.WGProblemQuantities;
+import org.geoframe.whetgeo1d.core.state.SubStepping;
 import org.hortonmachine.gears.libs.modules.HMModel;
 
 import oms3.annotations.Author;
@@ -567,12 +568,8 @@ public class HeatDiffusionSolverWithFreezingThawingWithSurfaceEnergyBalance1D ex
 		double sumTimeDelta = 0;
 
 		
-		while(sumTimeDelta < tTimeStep) {
+		for (double timeDelta : SubStepping.subStepLengths(tTimeStep, this.timeDelta)) {
 
-			
-			if(sumTimeDelta + timeDelta>tTimeStep) {
-				timeDelta = tTimeStep - sumTimeDelta;
-			}
 			sumTimeDelta = sumTimeDelta + timeDelta;
 
 			/*
