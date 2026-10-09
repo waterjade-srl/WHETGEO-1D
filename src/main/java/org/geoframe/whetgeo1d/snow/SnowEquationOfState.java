@@ -183,13 +183,13 @@ public final class SnowEquationOfState {
 
 	/**
 	 * Re-partitions ice and liquid of a cell at thermodynamic equilibrium with its
-	 * internal energy (specification §3.1, §3.3). Total mass, thickness, U and age
-	 * are unchanged.
+	 * internal energy (specification §3.1, §3.3). Total mass, thickness and U are
+	 * unchanged.
 	 */
 	public SnowCell equilibrate(SnowCell cell) {
 		double totalMass = cell.totalMass();
 		double liquid = totalMass * liquidFraction(temperature(cell));
-		return new SnowCell(totalMass - liquid, liquid, cell.thickness(), cell.internalEnergy(), cell.age());
+		return new SnowCell(totalMass - liquid, liquid, cell.thickness(), cell.internalEnergy());
 	}
 
 	private double specificEnergy(double temperature) {

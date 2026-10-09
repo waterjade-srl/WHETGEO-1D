@@ -99,12 +99,11 @@ public class SnowEquationOfStateTest {
 	@Test
 	public void equilibrateKeepsExtensiveQuantitiesAndRepartitions() {
 		SnowEquationOfState eos = new SnowEquationOfState(1e4);
-		SnowCell cell = new SnowCell(100.0, 0.0, 0.3, 0.2 * LATENT_HEAT_FUSION * 100.0, 3600.0);
+		SnowCell cell = new SnowCell(100.0, 0.0, 0.3, 0.2 * LATENT_HEAT_FUSION * 100.0);
 		SnowCell equilibrium = eos.equilibrate(cell);
 		assertEquals(cell.totalMass(), equilibrium.totalMass(), 1e-12);
 		assertEquals(cell.internalEnergy(), equilibrium.internalEnergy(), 0.0);
 		assertEquals(cell.thickness(), equilibrium.thickness(), 0.0);
-		assertEquals(cell.age(), equilibrium.age(), 0.0);
 		double t = eos.temperature(equilibrium);
 		assertTrue(t < MELTING_TEMPERATURE);
 		assertEquals(eos.liquidFraction(t) * 100.0, equilibrium.liquidMass(), 1e-9);

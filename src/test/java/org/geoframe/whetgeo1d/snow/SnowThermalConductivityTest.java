@@ -48,7 +48,7 @@ public class SnowThermalConductivityTest {
 
 	@Test
 	public void cellOverload() {
-		SnowCell cell = new SnowCell(150.0, 0.0, 0.5, 0.0, 0.0);
+		SnowCell cell = new SnowCell(150.0, 0.0, 0.5, 0.0);
 		assertEquals(SnowThermalConductivity.STURM_1997.conductivity(0.0, 300.0 / 917.0),
 				SnowThermalConductivity.STURM_1997.conductivity(cell), 1e-12);
 	}

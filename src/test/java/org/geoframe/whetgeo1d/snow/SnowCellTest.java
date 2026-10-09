@@ -8,18 +8,16 @@ public class SnowCellTest {
 
 	private static final double REL = 1e-14;
 
-	private final SnowCell lower = new SnowCell(80.0, 2.0, 0.25, -1.5e6, 7200.0);
-	private final SnowCell upper = new SnowCell(15.0, 0.0, 0.12, -4.0e5, 0.0);
+	private final SnowCell lower = new SnowCell(80.0, 2.0, 0.25, -1.5e6);
+	private final SnowCell upper = new SnowCell(15.0, 0.0, 0.12, -4.0e5);
 
 	@Test
-	public void mergeConservesExtensiveQuantitiesAndMassTimesAge() {
+	public void mergeConservesExtensiveQuantities() {
 		SnowCell merged = lower.merge(upper);
 		assertEquals(95.0, merged.iceMass(), 0.0);
 		assertEquals(2.0, merged.liquidMass(), 0.0);
 		assertEquals(0.37, merged.thickness(), 1e-15);
 		assertEquals(-1.9e6, merged.internalEnergy(), 0.0);
-		assertEquals(lower.totalMass() * lower.age() + upper.totalMass() * upper.age(),
-				merged.totalMass() * merged.age(), REL * merged.totalMass() * lower.age());
 	}
 
 	@Test
@@ -31,7 +29,6 @@ public class SnowCellTest {
 			liquid += piece.liquidMass();
 			depth += piece.thickness();
 			energy += piece.internalEnergy();
-			assertEquals(lower.age(), piece.age(), 0.0);
 			assertEquals(lower.density(), piece.density(), 1e-12 * lower.density());
 		}
 		assertEquals(lower.iceMass(), ice, REL * lower.iceMass());
@@ -48,16 +45,14 @@ public class SnowCellTest {
 		assertEquals(lower.liquidMass(), back.liquidMass(), REL * lower.liquidMass());
 		assertEquals(lower.thickness(), back.thickness(), REL * lower.thickness());
 		assertEquals(lower.internalEnergy(), back.internalEnergy(), REL * Math.abs(lower.internalEnergy()));
-		assertEquals(lower.age(), back.age(), REL * lower.age());
 	}
 
 	@Test
 	public void addAndRemoveMass() {
-		SnowCell grown = upper.withAge(1000.0).addMass(5.0, 0.0, -1.0e5, 0.05);
+		SnowCell grown = upper.addMass(5.0, 0.0, -1.0e5, 0.05);
 		assertEquals(20.0, grown.iceMass(), 0.0);
 		assertEquals(0.17, grown.thickness(), 1e-15);
 		assertEquals(-5.0e5, grown.internalEnergy(), 0.0);
-		assertEquals(15.0 * 1000.0 / 20.0, grown.age(), 1e-12);
 
 		SnowCell drained = lower.removeMass(0.0, 1.5, 1.5 * 333700.0, 0.0);
 		assertEquals(0.5, drained.liquidMass(), 1e-15);
@@ -66,7 +61,7 @@ public class SnowCellTest {
 
 	@Test
 	public void derivedQuantities() {
-		SnowCell cell = new SnowCell(91.7, 10.0, 0.5, 0.0, 0.0);
+		SnowCell cell = new SnowCell(91.7, 10.0, 0.5, 0.0);
 		assertEquals(203.4, cell.density(), 1e-12);
 		assertEquals(0.2, cell.iceVolumeFraction(), 1e-15);
 		assertEquals(0.02, cell.liquidVolumeFraction(), 1e-15);
@@ -88,7 +83,7 @@ public class SnowCellTest {
 
 	@Test(expected = IllegalArgumentException.class)
 	public void massLessCellIsRejected() {
-		new SnowCell(0.0, 0.0, 0.1, 0.0, 0.0);
+		new SnowCell(0.0, 0.0, 0.1, 0.0);
 	}
 
 	@Test(expected = IllegalArgumentException.class)

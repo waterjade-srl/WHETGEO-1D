@@ -32,20 +32,21 @@ import static org.geoframe.whetgeo1d.snow.SnowConstants.WATER_DENSITY;
  * thickness and internal energy exactly; ice and liquid are summed as they
  * stand, and are re-partitioned at equilibrium by
  * {@link SnowEquationOfState#equilibrate(SnowCell)} when the caller needs it.
- * Age is carried as mass-weighted, so mass × age is conserved too.
+ *
+ * <p>
+ * The cell holds no microstructure: the snow age that drives the albedo is a
+ * property of the surface, kept by {@link SurfaceSnowAge}, not of the cells.
  *
  * @param iceMass        [kg m-2]
  * @param liquidMass     [kg m-2]
  * @param thickness      [m]
  * @param internalEnergy U [J m-2], referred to {@link SnowConstants#MELTING_TEMPERATURE}
- * @param age            [s]
  */
-public record SnowCell(double iceMass, double liquidMass, double thickness, double internalEnergy, double age) {
+public record SnowCell(double iceMass, double liquidMass, double thickness, double internalEnergy) {
 
 	public SnowCell {
 		requireNonNegative(iceMass, "iceMass");
 		requireNonNegative(liquidMass, "liquidMass");
-		requireNonNegative(age, "age");
 		if (!(iceMass + liquidMass > 0.0)) {
 			throw new IllegalArgumentException("a snow cell must hold some mass");
 		}
@@ -57,11 +58,11 @@ public record SnowCell(double iceMass, double liquidMass, double thickness, doub
 		}
 	}
 
-	/** Cell at temperature T, with its phases at equilibrium and age zero. */
+	/** Cell at temperature T, with its phases at equilibrium. */
 	public static SnowCell atTemperature(SnowEquationOfState eos, double totalMass, double thickness,
 			double temperature) {
 		double liquid = totalMass * eos.liquidFraction(temperature);
-		return new SnowCell(totalMass - liquid, liquid, thickness, eos.internalEnergy(temperature, totalMass), 0.0);
+		return new SnowCell(totalMass - liquid, liquid, thickness, eos.internalEnergy(temperature, totalMass));
 	}
 
 	/** Ice plus liquid [kg m-2]. */
@@ -91,10 +92,8 @@ public record SnowCell(double iceMass, double liquidMass, double thickness, doub
 
 	/** This cell and the other one as a single cell. */
 	public SnowCell merge(SnowCell other) {
-		double mass = totalMass() + other.totalMass();
-		double age = (totalMass() * this.age + other.totalMass() * other.age) / mass;
 		return new SnowCell(iceMass + other.iceMass, liquidMass + other.liquidMass, thickness + other.thickness,
-				internalEnergy + other.internalEnergy, age);
+				internalEnergy + other.internalEnergy);
 	}
 
 	/**
@@ -125,27 +124,25 @@ public record SnowCell(double iceMass, double liquidMass, double thickness, doub
 		double energy = internalEnergy;
 		for (int i = 0; i < fractions.length - 1; i++) {
 			double f = fractions[i];
-			pieces[i] = new SnowCell(f * iceMass, f * liquidMass, f * thickness, f * internalEnergy, age);
+			pieces[i] = new SnowCell(f * iceMass, f * liquidMass, f * thickness, f * internalEnergy);
 			ice -= pieces[i].iceMass;
 			liquid -= pieces[i].liquidMass;
 			depth -= pieces[i].thickness;
 			energy -= pieces[i].internalEnergy;
 		}
-		pieces[fractions.length - 1] = new SnowCell(Math.max(ice, 0.0), Math.max(liquid, 0.0), depth, energy, age);
+		pieces[fractions.length - 1] = new SnowCell(Math.max(ice, 0.0), Math.max(liquid, 0.0), depth, energy);
 		return pieces;
 	}
 
 	/**
-	 * Adds mass with its energy and volume, for instance fresh snow or rain. The
-	 * added mass has age zero.
+	 * Adds mass with its energy and volume, for instance fresh snow or rain.
 	 */
 	public SnowCell addMass(double addedIce, double addedLiquid, double addedEnergy, double addedThickness) {
 		requireNonNegative(addedIce, "addedIce");
 		requireNonNegative(addedLiquid, "addedLiquid");
 		requireNonNegative(addedThickness, "addedThickness");
-		double mass = totalMass() + addedIce + addedLiquid;
 		return new SnowCell(iceMass + addedIce, liquidMass + addedLiquid, thickness + addedThickness,
-				internalEnergy + addedEnergy, totalMass() * age / mass);
+				internalEnergy + addedEnergy);
 	}
 
 	/**
@@ -159,22 +156,17 @@ public record SnowCell(double iceMass, double liquidMass, double thickness, doub
 		requireNonNegative(removedLiquid, "removedLiquid");
 		requireNonNegative(removedThickness, "removedThickness");
 		return new SnowCell(iceMass - removedIce, liquidMass - removedLiquid, thickness - removedThickness,
-				internalEnergy - removedEnergy, age);
+				internalEnergy - removedEnergy);
 	}
 
 	/** Same cell, with the given internal energy. */
 	public SnowCell withInternalEnergy(double newInternalEnergy) {
-		return new SnowCell(iceMass, liquidMass, thickness, newInternalEnergy, age);
+		return new SnowCell(iceMass, liquidMass, thickness, newInternalEnergy);
 	}
 
 	/** Same cell, with the given thickness (compaction). */
 	public SnowCell withThickness(double newThickness) {
-		return new SnowCell(iceMass, liquidMass, newThickness, internalEnergy, age);
-	}
-
-	/** Same cell, with the given age. */
-	public SnowCell withAge(double newAge) {
-		return new SnowCell(iceMass, liquidMass, thickness, internalEnergy, newAge);
+		return new SnowCell(iceMass, liquidMass, newThickness, internalEnergy);
 	}
 
 	private static void requireNonNegative(double value, String name) {
