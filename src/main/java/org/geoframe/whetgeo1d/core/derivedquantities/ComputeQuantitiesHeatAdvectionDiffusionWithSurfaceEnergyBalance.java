@@ -247,8 +247,11 @@ public class ComputeQuantitiesHeatAdvectionDiffusionWithSurfaceEnergyBalance {
 		// bottom interface
 		if (this.bottomBCType.equalsIgnoreCase("Bottom Dirichlet") || this.bottomBCType.equalsIgnoreCase("BottomDirichlet")) {
 			variables.conductionHeatFluxs[0] = -variables.lambdasInterface[0] * (variables.temperatures[0]-variables.internalEnergyBottomBCValue)/geometry.spaceDeltaZ[0];
+		} else if (this.bottomBCType.equalsIgnoreCase("Bottom Neumann") || this.bottomBCType.equalsIgnoreCase("BottomNeumann")) {
+			// the kernel adds +timeDelta * bC to the bottom cell: an upward flux bC
+			variables.conductionHeatFluxs[0] = variables.internalEnergyBottomBCValue;
 		} else {
-			variables.conductionHeatFluxs[0] = -variables.internalEnergyBottomBCValue;
+			variables.conductionHeatFluxs[0] = 0.0;
 		}
 		
 		// top interface

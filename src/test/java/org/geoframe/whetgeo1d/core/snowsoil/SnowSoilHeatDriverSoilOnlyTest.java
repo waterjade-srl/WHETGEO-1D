@@ -118,6 +118,10 @@ public class SnowSoilHeatDriverSoilOnlyTest {
 					bottom / STEP, STEP);
 
 			assertArrayEquals("step " + step, whetgeo.outTemperature, result.soilTemperatures(), 0.0);
+			// WHETGEO's diagnostics: the bottom flux enters the column upwards and the balance closes
+			assertEquals(bottom / STEP, whetgeo.outHeatFluxBottom, 0.0);
+			assertEquals(result.energy().bottomInput(), STEP * whetgeo.outHeatFluxBottom, 1e-9);
+			assertEquals("step " + step, 0.0, whetgeo.outErrorInternalEnergy, 1e-3);
 		}
 	}
 

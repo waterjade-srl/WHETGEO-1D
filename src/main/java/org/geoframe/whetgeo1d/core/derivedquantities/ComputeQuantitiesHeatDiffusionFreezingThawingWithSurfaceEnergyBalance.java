@@ -298,8 +298,11 @@ public class ComputeQuantitiesHeatDiffusionFreezingThawingWithSurfaceEnergyBalan
 		if (this.bottomBCType == DiffusionBoundaryConditionType.BOTTOM_DIRICHLET) {
 			variables.conductionHeatFluxs[0] = -variables.lambdasInterface[0]
 					* (variables.temperatures[0] - variables.internalEnergyBottomBCValue) / geometry.spaceDeltaZ[0];
+		} else if (this.bottomBCType == DiffusionBoundaryConditionType.BOTTOM_NEUMANN) {
+			// the kernel adds +timeDelta * bC to the bottom cell: an upward flux bC
+			variables.conductionHeatFluxs[0] = variables.internalEnergyBottomBCValue;
 		} else {
-			variables.conductionHeatFluxs[0] = -variables.internalEnergyBottomBCValue;
+			variables.conductionHeatFluxs[0] = 0.0;
 		}
 
 		// top interface
