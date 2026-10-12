@@ -68,12 +68,12 @@ public class SoilWaterVolumeVanGenuchten extends EquationState {
 	@Override
 	public double p(double x, double y, int id, int element) {
 
-		if (x <= variables.waterSuctionStar1[id]) {
+		if (x <= variables.waterSuctionStar1[element]) {
 			return dEquationState(x, y, id, element);
-		} else if (x > variables.waterSuctionStar1[id] && x < 0) {
-			return dEquationState(variables.waterSuctionStar1[id], y, id, element);
+		} else if (x > variables.waterSuctionStar1[element] && x < 0) {
+			return dEquationState(variables.waterSuctionStar1[element], y, id, element);
 		} else {
-			return dEquationState(variables.waterSuctionStar1[id], y, id, element) + dEquationState(x, y, id, element);
+			return dEquationState(variables.waterSuctionStar1[element], y, id, element) + dEquationState(x, y, id, element);
 		}
 
 	}
@@ -81,16 +81,16 @@ public class SoilWaterVolumeVanGenuchten extends EquationState {
 	@Override
 	public double pIntegral(double x, double y, int id, int element) {
 
-		if (x <= variables.waterSuctionStar1[id]) {
+		if (x <= variables.waterSuctionStar1[element]) {
 			return equationState(x, y, id, element);
-		} else if (x > variables.waterSuctionStar1[id] && x < 0) {
-			return equationState(variables.waterSuctionStar1[id], y, id, element)
-					+ dEquationState(variables.waterSuctionStar1[id], y, id, element)
-							* (x - variables.waterSuctionStar1[id]);
+		} else if (x > variables.waterSuctionStar1[element] && x < 0) {
+			return equationState(variables.waterSuctionStar1[element], y, id, element)
+					+ dEquationState(variables.waterSuctionStar1[element], y, id, element)
+							* (x - variables.waterSuctionStar1[element]);
 		} else {
-			return equationState(variables.waterSuctionStar1[id], y, id, element)
-					+ dEquationState(variables.waterSuctionStar1[id], y, id, element)
-							* (x - variables.waterSuctionStar1[id])
+			return equationState(variables.waterSuctionStar1[element], y, id, element)
+					+ dEquationState(variables.waterSuctionStar1[element], y, id, element)
+							* (x - variables.waterSuctionStar1[element])
 					+ dEquationState(x, y, id, element) * (x - 0);
 		}
 
