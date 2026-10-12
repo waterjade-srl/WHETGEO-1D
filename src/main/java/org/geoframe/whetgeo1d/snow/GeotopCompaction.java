@@ -132,6 +132,16 @@ public final class GeotopCompaction implements CompactionModel {
 			return new Parameters(0.7, 1.0, 100.0, 1.5, 1.0e6, 0.5);
 		}
 
+		/**
+		 * Recommended: GEOtop's coefficients with no minimum ice mass. The
+		 * minimum is a constant per cell, so it makes the compaction depend on the
+		 * grid: with cells of a few millimetres most of the pack holds less than
+		 * 0.5 kg m-2 of ice per cell and stops settling (document 010).
+		 */
+		public static Parameters recommended() {
+			return new Parameters(0.7, 1.0, 100.0, 1.5, 1.0e6, 0.0);
+		}
+
 		private static void requireNonNegative(double value, String name) {
 			if (!(value >= 0.0) || Double.isInfinite(value)) {
 				throw new IllegalArgumentException(name + " must be non-negative and finite, got " + value);
