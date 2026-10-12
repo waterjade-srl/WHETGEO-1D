@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import org.geoframe.closureequation.closureequation.Parameters;
 import org.geoframe.closureequation.equationstate.EquationState;
 import org.geoframe.closureequation.interfaceconductivity.InterfaceConductivity;
 import org.geoframe.closureequation.interfaceconductivity.InterfaceConductivityWeightedHarmonicMean;
@@ -89,6 +90,7 @@ public final class SnowSoilHeatDriver {
 	private static final int POLISH_ITERATIONS = 2;
 
 	private final SnowSoilColumn column;
+	private final Parameters soilParameters;
 	private final ComputeQuantitiesInternalEnergy soilQuantities;
 	private final SnowEquationOfState equationOfState;
 	private final SnowHeatProperties snowProperties;
@@ -120,6 +122,7 @@ public final class SnowSoilHeatDriver {
 
 		int snowId = soil == null ? 0 : soil.typeEquationState().length;
 		this.column = new SnowSoilColumn(soil, snow.maxCells(), snowId);
+		this.soilParameters = soil == null ? null : soil.parameters();
 
 		closures = new ArrayList<>();
 		if (soil != null) {
@@ -149,6 +152,155 @@ public final class SnowSoilHeatDriver {
 	/** Current soil temperatures [K], bottom first. */
 	public double[] soilTemperatures() {
 		return Arrays.copyOf(column.variables().temperatures, column.soilCells());
+	}
+
+	/**
+	 * Restores the soil temperatures, for instance to repeat a step with
+	 * another surface condition.
+	 *
+	 * @param temperatures [K], bottom first, one per soil cell
+	 */
+	public void setSoilTemperatures(double[] temperatures) {
+		if (temperatures.length != column.soilCells()) {
+			throw new IllegalArgumentException(
+					"expected " + column.soilCells() + " soil temperatures, got " + temperatures.length);
+		}
+		System.arraycopy(temperatures, 0, column.variables().temperatures, 0, temperatures.length);
+	}
+
+	/** Equation-state ids of the soil cells, bottom first. */
+	public int[] soilEquationStateIds() {
+		return Arrays.copyOf(column.variables().equationStateID, column.soilCells());
+	}
+
+	/** Parameter ids of the soil cells, bottom first. */
+	public int[] soilParameterIds() {
+		return Arrays.copyOf(column.variables().parameterID, column.soilCells());
+	}
+
+	/** Current soil suctions [m], bottom first, as the soil heat closures read them. */
+	public double[] soilSuctions() {
+		return Arrays.copyOf(column.variables().waterSuctions, column.soilCells());
+	}
+
+	/**
+	 * Internal energy of the soil [J m-2], Σ U(T_i, ψ_i) with WHETGEO's soil
+	 * closures, the reference of their {@code Parameters}.
+	 */
+	public double soilInternalEnergy() {
+		WGProblemQuantities variables = column.variables();
+		double sum = 0.0;
+		for (int i = 0; i < column.soilCells(); i++) {
+			sum += soilEnergy(i, variables.temperatures[i], variables.waterSuctions[i]);
+		}
+		return sum;
+	}
+
+	/**
+	 * Moves the energy of the water that Richards moved in the soil, and sets the
+	 * new suctions (specification §2.2 step 5, A8: water after energy, in
+	 * sequence). The water crossing a face carries the internal energy of liquid
+	 * water at the temperature of the cell it leaves (upwind),
+	 * L_f + c_w (T - T_ref) per kg, the partial energy of the liquid in the soil
+	 * closures; at the top it carries the given energy. Each cell then holds
+	 * U* = U(T, ψ<sup>old</sup>) + in - out, and its temperature is the one at
+	 * which U(T, ψ<sup>new</sup>) = U*. Energy is conserved exactly: the soil
+	 * changes by the top energy minus the energy leaving at the bottom.
+	 *
+	 * @param newSuctions ψ after Richards [m], bottom first
+	 * @param faceWater   water through each face in the step [kg m-2], positive
+	 *                    upwards, face 0 at the bottom, face n at the surface
+	 * @param topEnergy   internal energy of the water entering at the top [J m-2]
+	 *                    (same reference as the soil closures)
+	 * @return the energy that left at the bottom [J m-2], positive out
+	 */
+	public double transportSoilWater(double[] newSuctions, double[] faceWater, double topEnergy) {
+		int n = column.soilCells();
+		return transportSoilWater(newSuctions, faceWater, topEnergy, new double[n], new double[n]);
+	}
+
+	/**
+	 * Same, with liquid water the closures do not see, held at the temperature
+	 * of its cell before and after the step [kg m-2] (the specific storage above
+	 * saturation of a freezing soil): it enters U* with its energy, and the new
+	 * temperature solves U(T, ψ<sup>new</sup>) + m<sup>new</sup> e(T) = U*.
+	 */
+	public double transportSoilWater(double[] newSuctions, double[] faceWater, double topEnergy, double[] oldHidden,
+			double[] newHidden) {
+		int n = column.soilCells();
+		if (newSuctions.length != n || faceWater.length != n + 1) {
+			throw new IllegalArgumentException("expected " + n + " suctions and " + (n + 1) + " face fluxes");
+		}
+		WGProblemQuantities variables = column.variables();
+		double[] t = variables.temperatures;
+		// energy through each face, positive upwards
+		double[] faceEnergy = new double[n + 1];
+		for (int k = 0; k < n; k++) {
+			double water = faceWater[k];
+			int upwind = water > 0.0 ? k - 1 : k;
+			faceEnergy[k] = upwind < 0 ? water * liquidEnergy(t[0]) : water * liquidEnergy(t[upwind]);
+		}
+		faceEnergy[n] = -topEnergy;
+		double[] target = new double[n];
+		for (int i = 0; i < n; i++) {
+			target[i] = soilEnergy(i, t[i], variables.waterSuctions[i]) + oldHidden[i] * liquidEnergy(t[i])
+					+ faceEnergy[i] - faceEnergy[i + 1];
+		}
+		for (int i = 0; i < n; i++) {
+			variables.waterSuctions[i] = newSuctions[i];
+			t[i] = invertSoilEnergy(i, target[i], newSuctions[i], newHidden[i], t[i]);
+		}
+		return -faceEnergy[0];
+	}
+
+	/** Internal energy of liquid water per kg at T in the soil closures' reference [J kg-1]. */
+	public double liquidEnergy(double temperature) {
+		Parameters p = soilParameters;
+		return p.latentHeatFusion + p.specificThermalCapacityWater * (temperature - p.referenceTemperatureInternalEnergy);
+	}
+
+	private double soilEnergy(int i, double temperature, double suction) {
+		WGProblemQuantities variables = column.variables();
+		return closures.get(variables.equationStateID[i]).equationState(temperature, suction,
+				variables.parameterID[i], i);
+	}
+
+	/** T with U(T, ψ) + m e(T) = target, by Newton safeguarded with bisection; both increase with T. */
+	private double invertSoilEnergy(int i, double target, double suction, double hidden, double guess) {
+		WGProblemQuantities variables = column.variables();
+		EquationState closure = closures.get(variables.equationStateID[i]);
+		int id = variables.parameterID[i];
+		double low = guess - 1.0;
+		double high = guess + 1.0;
+		while (closure.equationState(low, suction, id, i) + hidden * liquidEnergy(low) > target) {
+			low -= 2.0 * (high - low);
+		}
+		while (closure.equationState(high, suction, id, i) + hidden * liquidEnergy(high) < target) {
+			high += 2.0 * (high - low);
+		}
+		double x = Math.min(Math.max(guess, low), high);
+		for (int iteration = 0; iteration < 200; iteration++) {
+			double residual = closure.equationState(x, suction, id, i) + hidden * liquidEnergy(x) - target;
+			if (residual == 0.0) {
+				return x;
+			}
+			if (residual > 0.0) {
+				high = x;
+			} else {
+				low = x;
+			}
+			double slope = closure.dEquationState(x, suction, id, i)
+					+ hidden * soilParameters.specificThermalCapacityWater;
+			double next = slope > 0.0 ? x - residual / slope : 0.5 * (low + high);
+			if (!(next > low && next < high)) {
+				next = 0.5 * (low + high);
+			}
+			if (next == x || Math.abs(next - x) <= 1e-15 * Math.abs(x)) {
+				return next;
+			}
+			x = next;
+		}
+		return x;
 	}
 
 	/** Number of soil cells. */

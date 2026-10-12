@@ -34,8 +34,56 @@ import org.geoframe.whetgeo1d.core.snowsoil.SoilHeatSetup;
  * @param temperature   uniform initial temperature [K]
  * @param interfaceModel name of WHETGEO's interface-conductivity model for the
  *                      soil faces
+ * @param hydraulics    water retention and conductivity
  */
-public record UniformSoil(int cells, double depth, double suction, double temperature, String interfaceModel) {
+public record UniformSoil(int cells, double depth, double suction, double temperature, String interfaceModel,
+		Hydraulics hydraulics) {
+
+	/**
+	 * Van Genuchten–Mualem parameters.
+	 *
+	 * @param thetaS     saturated water content [-]
+	 * @param thetaR     residual water content [-]
+	 * @param n          Van Genuchten n [-]
+	 * @param alpha      Van Genuchten α [m-1]
+	 * @param ks         saturated conductivity [m s-1]
+	 * @param specificStorage S_s above saturation [m-1], WHETGEO's ρ_w g α_SS
+	 */
+	public record Hydraulics(double thetaS, double thetaR, double n, double alpha, double ks, double specificStorage) {
+
+		/** WHETGEO's α_SS for this S_s [Pa-1]. */
+		public double alphaSpecificStorage() {
+			return specificStorage / (1000.0 * 9.81);
+		}
+
+		/**
+		 * The soil of documents 007–010: θ_s = 0.38, θ_r = 0.068, n = 1.09, α = 0.8
+		 * m-1, a fine soil whose water content hardly changes with suction. Near
+		 * saturation it has almost no pore space, so a large infiltration in
+		 * one step saturates the top cell, and with no specific storage Richards
+		 * has no solution.
+		 */
+		public static Hydraulics fine() {
+			return new Hydraulics(THETA_S, THETA_R, VG_N, VG_ALPHA, 1e-5, 0.0);
+		}
+
+		/**
+		 * A sandy loam (Carsel and Parrish, 1988): θ_s = 0.41, θ_r = 0.065, n = 1.89,
+		 * α = 7.5 m-1, K_s = 1.23·10⁻⁵ m s-1 (4.4 cm h-1), with GEOtop's default
+		 * specific storage S_s = 10⁻⁷ mm-1 = 10⁻⁴ m-1, for the cases with soil water
+		 * (documents 011, 012). Without storage a saturated cell, e.g. one whose
+		 * pores are filled by ice, cannot take any water and Richards has no
+		 * solution.
+		 */
+		public static Hydraulics sandyLoam() {
+			return new Hydraulics(0.41, 0.065, 1.89, 7.5, 1.23e-5, 1e-4);
+		}
+	}
+
+	/** The soil of documents 007–010, {@link Hydraulics#fine()}. */
+	public UniformSoil(int cells, double depth, double suction, double temperature, String interfaceModel) {
+		this(cells, depth, suction, temperature, interfaceModel, Hydraulics.fine());
+	}
 
 	public static final double THETA_S = 0.38;
 	public static final double THETA_R = 0.068;
@@ -49,10 +97,11 @@ public record UniformSoil(int cells, double depth, double suction, double temper
 	public Parameters parameters() {
 		double[] one = { 0.0 };
 		return new Parameters(1000.0, 920.0, 4188.0, 2117.0, 0.6, 2.29, 333700, 273.15, 278.15, -766.45,
-				new double[] { THETA_S }, new double[] { THETA_R }, new double[] { PARTICLE_DENSITY },
-				new double[] { PARTICLE_HEAT_CAPACITY }, new double[] { PARTICLE_CONDUCTIVITY },
-				new double[] { 273.15 }, new double[] { VG_N }, new double[] { VG_ALPHA }, one.clone(), one.clone(),
-				one.clone(), new double[] { 1e-5 }, one.clone(), one.clone());
+				new double[] { hydraulics.thetaS() }, new double[] { hydraulics.thetaR() },
+				new double[] { PARTICLE_DENSITY }, new double[] { PARTICLE_HEAT_CAPACITY },
+				new double[] { PARTICLE_CONDUCTIVITY }, new double[] { 273.15 }, new double[] { hydraulics.n() },
+				new double[] { hydraulics.alpha() }, one.clone(), one.clone(), one.clone(),
+				new double[] { hydraulics.ks() }, new double[] { hydraulics.alphaSpecificStorage() }, one.clone());
 	}
 
 	public double cellSize() {
@@ -97,6 +146,17 @@ public record UniformSoil(int cells, double depth, double suction, double temper
 
 	public int[] zeros() {
 		return new int[cells];
+	}
+
+	/**
+	 * The setup with WHETGEO's freezing soil: Dall'Amico's freezing curve on Van
+	 * Genuchten and {@code FreezingSoilInternalEnergy} (document 012). The
+	 * suction is then ψ_w0, the potential of the total water.
+	 */
+	public SoilHeatSetup freezingSetup() {
+		return new SoilHeatSetup(z(), spaceDeltaZ(), controlVolume(), suctions(), temperatures(), zeros(), zeros(),
+				new String[] { "Van Genuchten Dall Amico" }, new String[] { "FreezingSoilInternalEnergy" },
+				new String[] { "Cosenza" }, interfaceModel, parameters());
 	}
 
 	/** The setup for the snow+soil driver. */
