@@ -40,9 +40,21 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceForcing;
  * @param bottomValue        temperature [K] or flux into the column [W m-2] at
  *                           the bottom, as the heat driver's bottom type
  * @param timeDelta          step length [s]
+ * @param soilWaterSinks     evapotranspiration to take from each soil cell in
+ *                           the step [kg m-2], bottom first, e.g. from GEOET;
+ *                           null for none. Only with soil water; with snow on
+ *                           the ground the caller passes none (§6.5, B4)
  */
 public record StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
-		double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta) {
+		double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta,
+		double[] soilWaterSinks) {
+
+	/** Forcing without evapotranspiration. */
+	public StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
+			double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta) {
+		this(surface, snowfall, rainfall, groundAlbedoVisible, groundAlbedoNearInfrared, bareSoilTop, bottomValue,
+				timeDelta, null);
+	}
 
 	public StepForcing {
 		Objects.requireNonNull(surface, "surface");
@@ -58,6 +70,12 @@ public record StepForcing(SurfaceForcing surface, double snowfall, double rainfa
 		}
 		if (!(timeDelta > 0.0) || Double.isInfinite(timeDelta)) {
 			throw new IllegalArgumentException("timeDelta must be positive and finite, got " + timeDelta);
+		}
+		if (soilWaterSinks != null) {
+			soilWaterSinks = soilWaterSinks.clone();
+			for (double sink : soilWaterSinks) {
+				requireNonNegative(sink, "soilWaterSinks");
+			}
 		}
 	}
 

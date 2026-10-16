@@ -433,6 +433,10 @@ public final class SnowSoilSolver {
 		double soilDrainageEnergy = Double.NaN;
 		double soilEnergyClosure = Double.NaN;
 		double soilStorageHeat = Double.NaN;
+		double soilSinkEnergy = Double.NaN;
+		if (water == null && forcing.soilWaterSinks() != null) {
+			throw new IllegalArgumentException("evapotranspiration needs soil water");
+		}
 		if (water != null) {
 			// the water stored above saturation follows its cell in the heat step, without its heat capacity
 			double[] afterHeat = heat.soilTemperatures();
@@ -464,7 +468,8 @@ public final class SnowSoilSolver {
 			if (anyFreezing) {
 				water.setSuctions(liquidSuctions);
 			}
-			soilWater = water.step(totalSoilInput, 0.0, heat.soilTemperatures(), anyIce ? ice : null, dt);
+			soilWater = water.step(totalSoilInput, 0.0, heat.soilTemperatures(), anyIce ? ice : null,
+					forcing.soilWaterSinks(), dt);
 			double[] newHeatSuctions = soilWater.suctions().clone();
 			for (int i = 0; i < ice.length && anyFreezing; i++) {
 				if (!freezing[eos[i]]) {
@@ -483,12 +488,13 @@ public final class SnowSoilSolver {
 					? soilWater.infiltration() * heat.liquidEnergy(MELTING_TEMPERATURE
 							+ (totalSoilInputEnergy / totalSoilInput - LATENT_HEAT_FUSION) / SPECIFIC_HEAT_WATER)
 					: 0.0;
+			soilSinkEnergy = heat.sinkEnergy(soilWater.sinks());
 			soilDrainageEnergy = heat.transportSoilWater(newHeatSuctions, soilWater.faceWater(), topEnergy, oldExcess,
-					newExcess);
+					newExcess, soilWater.sinks());
 			double[] fluxes = heatStep.conductiveFluxes();
 			int nSoil = heat.soilCells();
 			soilEnergyClosure = soilInternalEnergy() - soilEnergyBefore
-					- dt * (fluxes[0] - fluxes[nSoil]) - topEnergy + soilDrainageEnergy - soilStorageHeat;
+					- dt * (fluxes[0] - fluxes[nSoil]) - topEnergy + soilDrainageEnergy + soilSinkEnergy - soilStorageHeat;
 		}
 
 		snow = cells;

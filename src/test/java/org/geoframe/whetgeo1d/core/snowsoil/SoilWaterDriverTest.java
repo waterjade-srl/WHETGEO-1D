@@ -14,6 +14,7 @@ import org.geoframe.whetgeo1d.snow.SnowColumn;
 import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
 import org.geoframe.whetgeo1d.snow.SnowThermalConductivity;
 import org.geoframe.whetgeo1d.solvers.RichardsSolver1D;
+import org.geoframe.whetgeo1d.solvers.RichardsSolverWithRootWaterUptake1D;
 import org.junit.Test;
 
 /** Richards under the snow, and the energy the water carries in the soil. */
@@ -42,6 +43,150 @@ public class SoilWaterDriverTest {
 			assertEquals(result.balanceError(), result.storageChange() - result.infiltration() + result.drainage(),
 					1e-9);
 		}
+	}
+
+	/**
+	 * With evapotranspiration below the top cell, the same suctions as WHETGEO's
+	 * RichardsSolverWithRootWaterUptake1D fed the same stressedETs, to the bit.
+	 * WHETGEO's root solver ignores the sink of the top cell, and at its first
+	 * step it overwrites stressedETs with zeros (it allocates the array there):
+	 * the comparison starts with no sink.
+	 */
+	@Test
+	public void reproducesRootWaterUptakeBitwise() {
+		SoilWaterDriver driver = new SoilWaterDriver(LOAM.setup(), SoilWaterProperties.vanGenuchtenFreeDrainage());
+		RichardsSolverWithRootWaterUptake1D reference = rootSolver();
+		HashMap<Integer, double[]> top = new HashMap<>();
+		reference.inTopBC = top;
+		double[] sinks = new double[LOAM.cells()];
+		for (int i = 12; i < LOAM.cells() - 1; i++) {
+			sinks[i] = 0.02 * (i - 11);
+		}
+		for (int k = 0; k < 2 * RAIN.length; k++) {
+			double rain = RAIN[k % RAIN.length];
+			double[] applied = k == 0 ? new double[sinks.length] : sinks;
+			top.put(0, new double[] { rain });
+			reference.stressedETs = applied.clone();
+			reference.solve();
+			SoilWaterStepResult result = driver.step(rain, 0.0, LOAM.temperatures(), null, applied, 3600.0);
+			assertArrayEquals("step " + k, reference.outWaterSuctions, result.suctions(), 0.0);
+			assertArrayEquals(applied, result.sinks(), 1e-15);
+			assertEquals(0.0, result.storageChange() - result.infiltration() + result.drainage()
+					+ result.evapotranspiration(), 1e-7);
+		}
+	}
+
+	/**
+	 * Evaporation from the top cell of a drying soil: the balance closes with the
+	 * sink, and the sink stops at the wilting point (ψ = -150 m), not at θ_r,
+	 * where ψ would run to -∞.
+	 */
+	@Test
+	public void evaporationStopsAtWiltingPoint() {
+		UniformSoil thin = new UniformSoil(10, 0.1, -1.0, 278.15, "Weighted Harmonic Mean",
+				UniformSoil.Hydraulics.sandyLoam());
+		SoilWaterDriver driver = new SoilWaterDriver(thin.setup(), SoilWaterProperties.vanGenuchtenFreeDrainage());
+		double[] sinks = new double[thin.cells()];
+		sinks[thin.cells() - 1] = 2.0;
+		double evaporated = 0.0;
+		double drained = 0.0;
+		double storage = driver.storage();
+		for (int k = 0; k < 48; k++) {
+			SoilWaterStepResult result = driver.step(0.0, 0.0, thin.temperatures(), null, sinks, 3600.0);
+			assertEquals("step " + k, 0.0, result.balanceError(), 1e-7);
+			assertTrue(result.evapotranspiration() <= 2.0 + 1e-12);
+			evaporated += result.evapotranspiration();
+			drained += result.drainage();
+		}
+		assertEquals(storage, driver.storage() + evaporated + drained, 1e-6);
+		// 10 cm of sandy loam above θ_r hold at most 0.345 · 100 kg m-2: 96 cannot be given
+		assertTrue("evaporated " + evaporated, evaporated < 0.345 * 100.0);
+		double[] psi = driver.suctions();
+		double top = driver.retention().liquid(psi[thin.cells() - 1], 0.0, 0);
+		double wilting = driver.retention().liquid(SoilWaterDriver.WILTING_SUCTION, 0.0, 0);
+		assertTrue("top cell at " + top, top >= wilting - 1e-9);
+		assertTrue("top cell dried to the wilting point: ψ = " + psi[thin.cells() - 1],
+				psi[thin.cells() - 1] > 1.01 * SoilWaterDriver.WILTING_SUCTION && psi[thin.cells() - 1] < -10.0);
+	}
+
+	/**
+	 * Bare soil, frozen at the bottom, with rain and evaporation from the top and
+	 * transpiration from the root zone: water and soil energy close at every
+	 * step, the evaporated water leaving with its energy.
+	 */
+	@Test
+	public void evapotranspirationClosesSoilBudgets() {
+		UniformSoil soil = new UniformSoil(40, 2.0, -1.0, 274.15, "Weighted Harmonic Mean",
+				UniformSoil.Hydraulics.sandyLoam());
+		SnowEquationOfState eos = new SnowEquationOfState(1e5);
+		SnowSoilSolver solver = new SnowSoilSolver(soil.freezingSetup(), SoilWaterProperties.vanGenuchtenFreeDrainage(),
+				new SnowHeatProperties(eos, SnowThermalConductivity.JORDAN_1991, 11),
+				DiffusionBoundaryConditionType.BOTTOM_DIRICHLET, NewtonSettings.defaults(),
+				SnowProcesses.recommended(eos, 2.0, 2.0), java.util.List.of(), 0.0);
+		double storage = solver.soilWaterStorage();
+		double in = 0.0;
+		double out = 0.0;
+		for (int k = 0; k < 96; k++) {
+			double hour = k % 24;
+			double rain = RAIN[k % RAIN.length];
+			double[] sinks = new double[soil.cells()];
+			sinks[soil.cells() - 1] = hour > 8 && hour < 18 ? 0.3 : 0.0;
+			for (int i = soil.cells() - 11; i < soil.cells() - 1; i++) {
+				sinks[i] = 0.02;
+			}
+			StepForcing forcing = new StepForcing(
+					org.geoframe.whetgeo1d.snow.surface.SurfaceForcing.withoutBeam(0.0, 300.0, 285.0, 0.6, 2.0, 85000.0),
+					0.0, rain, 0.2, 0.2, new TopBoundary.SurfaceTemperature(285.0 + 5.0 * Math.sin(hour / 24 * 6.28)),
+					267.15, 3600.0, sinks);
+			SnowSoilStepResult r = solver.step(forcing);
+			in += rain;
+			out += r.soilWater().drainage() + r.soilWater().runoff() + r.soilWater().evapotranspiration();
+			assertEquals("energy, step " + k, 0.0, r.soilEnergyClosure(), 1e-2);
+			assertEquals("water, step " + k, 0.0, r.soilWater().balanceError(), 1e-6);
+		}
+		assertEquals(storage + in, solver.soilWaterStorage() + out, 1e-5);
+		assertTrue("evapotranspiration happened", out > 20.0);
+	}
+
+	private static RichardsSolverWithRootWaterUptake1D rootSolver() {
+		RichardsSolverWithRootWaterUptake1D solver = new RichardsSolverWithRootWaterUptake1D();
+		RichardsSolver1D base = richardsSolver();
+		solver.z = base.z;
+		solver.spaceDeltaZ = base.spaceDeltaZ;
+		solver.controlVolume = base.controlVolume;
+		solver.psiIC = base.psiIC;
+		solver.temperature = base.temperature;
+		solver.ks = base.ks;
+		solver.thetaS = base.thetaS;
+		solver.thetaR = base.thetaR;
+		solver.thetaWP = base.thetaR.clone();
+		solver.thetaFC = base.thetaS.clone();
+		solver.par1SWRC = base.par1SWRC;
+		solver.par2SWRC = base.par2SWRC;
+		solver.par3SWRC = base.par3SWRC;
+		solver.par4SWRC = base.par4SWRC;
+		solver.par5SWRC = base.par5SWRC;
+		solver.alphaSpecificStorage = base.alphaSpecificStorage;
+		solver.betaSpecificStorage = base.betaSpecificStorage;
+		solver.inEquationStateID = base.inEquationStateID;
+		solver.inParameterID = base.inParameterID;
+		solver.beta0 = base.beta0;
+		solver.referenceTemperatureSWRC = base.referenceTemperatureSWRC;
+		solver.maxPonding = base.maxPonding;
+		solver.typeClosureEquation = base.typeClosureEquation;
+		solver.typeEquationState = base.typeEquationState;
+		solver.typeUHCModel = base.typeUHCModel;
+		solver.typeUHCTemperatureModel = base.typeUHCTemperatureModel;
+		solver.interfaceHydraulicConductivityModel = base.interfaceHydraulicConductivityModel;
+		solver.topBCType = base.topBCType;
+		solver.bottomBCType = base.bottomBCType;
+		solver.tTimeStep = base.tTimeStep;
+		solver.timeDelta = base.timeDelta;
+		solver.newtonTolerance = base.newtonTolerance;
+		solver.nestedNewton = base.nestedNewton;
+		solver.picardIteration = base.picardIteration;
+		solver.stationID = base.stationID;
+		return solver;
 	}
 
 	private static RichardsSolver1D richardsSolver() {

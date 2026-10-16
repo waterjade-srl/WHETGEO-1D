@@ -29,11 +29,24 @@ package org.geoframe.whetgeo1d.core.snowsoil;
  * @param infiltration  water entering at the top
  * @param drainage      water leaving at the bottom, positive out
  * @param storageChange change of the water stored in the soil
- * @param balanceError  storageChange - infiltration + drainage, the sum of
- *                      WHETGEO's {@code errorVolume} over the substeps
+ * @param balanceError  storageChange - infiltration + drainage +
+ *                      evapotranspiration, the sum of WHETGEO's
+ *                      {@code errorVolume} over the substeps
  * @param runoff        water the soil could not take, input - infiltration,
  *                      when the surface was held saturated; zero otherwise
+ * @param sinks         water taken by evapotranspiration from each cell,
+ *                      bottom first, as applied (the request capped at the
+ *                      liquid above the wilting point)
  */
 public record SoilWaterStepResult(double[] suctions, double[] faceWater, double infiltration, double drainage,
-		double storageChange, double balanceError, double runoff) {
+		double storageChange, double balanceError, double runoff, double[] sinks) {
+
+	/** Total evapotranspiration applied in the step [kg m-2]. */
+	public double evapotranspiration() {
+		double sum = 0.0;
+		for (double s : sinks) {
+			sum += s;
+		}
+		return sum;
+	}
 }

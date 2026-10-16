@@ -55,15 +55,26 @@ import org.geoframe.whetgeo1d.core.state.WGProblemQuantities;
  * of the liquid.
  *
  * <p>
- * Evapotranspiration is zero: with snow on the ground the soil does not
- * evaporate (§6.5, B4), and the bare-soil evaporation belongs to WHETGEO's
- * coupling with GEOET, not to this driver.
+ * <b>Evapotranspiration</b> is an input, as in WHETGEO's
+ * {@code RichardsSolverWithRootWaterUptake1D}, where GEOET provides it: water
+ * taken from each cell in the step, passed to the kernel as its sink
+ * {@code ETs}, spread evenly over the substeps and capped in each substep at
+ * the liquid above the wilting point of the cell, θ(ψ = {@value #WILTING_SUCTION}
+ * m) (ice does not evaporate). The cap plays the role of WHETGEO's
+ * {@code thetaWP}: a cell drained to θ_r would have ψ → -∞, and the freezing
+ * curve of the heat step, whose melting point follows ψ, would lose meaning.
+ * The applied amounts are returned and enter the balance as WHETGEO's
+ * {@code sumETs}. With snow on the ground the caller passes none (§6.5, B4).
+ * WHETGEO's own cap, {@code ComputeQuantitiesRichardsRoot}, is not used: it
+ * skips the top cell, which is where the soil evaporates.
  */
 public final class SoilWaterDriver {
 
 	private static final double WATER_DENSITY = 1000.0;
 	/** Water balance error of a step above which the Neumann top is considered failed [kg m-2]. */
 	private static final double FAILED_BALANCE = 1e-6;
+	/** Suction of the wilting point, -1.5 MPa: evapotranspiration does not dry a cell below it [m]. */
+	public static final double WILTING_SUCTION = -150.0;
 
 	private final int cells;
 	private final SoilWaterProperties properties;
@@ -76,6 +87,7 @@ public final class SoilWaterDriver {
 	private final Richards1DKernel neumannIceKernel;
 	private final Richards1DKernel dirichletIceKernel;
 	private final IceAwareRetention retention;
+	private final double[] wiltingPoint;
 	private final double[] ice;
 	private final List<EquationState> iceStates;
 
@@ -93,6 +105,10 @@ public final class SoilWaterDriver {
 		this.neumann = quantities(water, RichardsBoundaryConditionType.TOP_NEUMANN, soil);
 		this.dirichlet = quantities(water, RichardsBoundaryConditionType.TOP_DIRICHLET, soil);
 		this.retention = new IceAwareRetention(soil.parameters());
+		this.wiltingPoint = new double[soil.parameters().thetaR.length];
+		for (int id = 0; id < wiltingPoint.length; id++) {
+			wiltingPoint[id] = retention.liquid(WILTING_SUCTION, 0.0, id);
+		}
 		this.ice = new double[cells];
 		this.iceStates = new ArrayList<>();
 		for (int k = 0; k < neumann.getRichardsStateEquation().size(); k++) {
@@ -175,6 +191,18 @@ public final class SoilWaterDriver {
 	 */
 	public SoilWaterStepResult step(double input, double bottomValue, double[] temperatures, double[] iceContents,
 			double timeDelta) {
+		return step(input, bottomValue, temperatures, iceContents, null, timeDelta);
+	}
+
+	/**
+	 * Advances the soil water by one step, with evapotranspiration.
+	 *
+	 * @param iceContents θ_i of each cell (water equivalent), null for none
+	 * @param sinks       water to take from each cell in the step [kg m-2],
+	 *                    bottom first, not negative; null for none
+	 */
+	public SoilWaterStepResult step(double input, double bottomValue, double[] temperatures, double[] iceContents,
+			double[] sinks, double timeDelta) {
 		if (!(input >= 0.0) || Double.isInfinite(input)) {
 			throw new IllegalArgumentException("input must be non-negative and finite, got " + input);
 		}
@@ -192,10 +220,23 @@ public final class SoilWaterDriver {
 				frozen |= ice[i] > 0.0;
 			}
 		}
+		double[] requested = new double[cells];
+		if (sinks != null) {
+			if (sinks.length != cells) {
+				throw new IllegalArgumentException("expected " + cells + " sinks, got " + sinks.length);
+			}
+			for (int i = 0; i < cells; i++) {
+				if (!(sinks[i] >= 0.0) || Double.isInfinite(sinks[i])) {
+					throw new IllegalArgumentException("sinks must be non-negative and finite, got " + sinks[i]);
+				}
+				requested[i] = sinks[i];
+			}
+		}
 		System.arraycopy(temperatures, 0, variables.temperatures, 0, cells);
 		double[] start = suctions();
 
-		SoilWaterStepResult result = solve(false, (input / 1000) / timeDelta, input, bottomValue, frozen, timeDelta);
+		SoilWaterStepResult result = solve(false, (input / 1000) / timeDelta, input, bottomValue, frozen, requested,
+				timeDelta);
 		int top = cells - 1;
 		double saturation = retention.saturationSuction(ice[top], variables.parameterID[top]);
 		boolean failed = !(Math.abs(result.balanceError()) <= FAILED_BALANCE)
@@ -205,10 +246,10 @@ public final class SoilWaterDriver {
 		}
 		// the soil cannot take the input: surface held saturated, the rest runs off
 		setSuctions(start);
-		SoilWaterStepResult saturated = solve(true, saturation, input, bottomValue, frozen, timeDelta);
+		SoilWaterStepResult saturated = solve(true, saturation, input, bottomValue, frozen, requested, timeDelta);
 		if (!(saturated.infiltration() < input)) {
 			setSuctions(start);
-			return solve(false, (input / 1000) / timeDelta, input, bottomValue, frozen, timeDelta);
+			return solve(false, (input / 1000) / timeDelta, input, bottomValue, frozen, requested, timeDelta);
 		}
 		return saturated;
 	}
@@ -218,9 +259,10 @@ public final class SoilWaterDriver {
 	 *
 	 * @param saturatedTop Dirichlet top at {@code topValue} [m] instead of a
 	 *                     Neumann flux {@code topValue} [m s-1]
+	 * @param requested    water to take from each cell in the step [kg m-2]
 	 */
 	private SoilWaterStepResult solve(boolean saturatedTop, double topValue, double input, double bottomValue,
-			boolean frozen, double timeDelta) {
+			boolean frozen, double[] requested, double timeDelta) {
 		ComputeQuantitiesRichards quantities = saturatedTop ? dirichlet : neumann;
 		Richards1DKernel kernel = frozen ? (saturatedTop ? dirichletIceKernel : neumannIceKernel)
 				: (saturatedTop ? dirichletKernel : neumannKernel);
@@ -231,6 +273,7 @@ public final class SoilWaterDriver {
 		double storageBefore = frozen ? liquidStorage(ice) : storage();
 		double[] faceWater = new double[cells + 1];
 		double[] held = new double[cells];
+		double[] applied = new double[cells];
 		double error = 0.0;
 		for (double dt : SubStepping.subStepLengths(timeDelta, properties.maxSubstep())) {
 			if (frozen) {
@@ -243,6 +286,16 @@ public final class SoilWaterDriver {
 			} else {
 				quantities.computeWaterVolume(cells);
 				quantities.computeXStar(cells);
+			}
+			// the sink of the substep, at most the liquid above the wilting point [m]
+			variables.sumETs = 0.0;
+			for (int i = 0; i < cells; i++) {
+				double available = variables.volumes[i]
+						- wiltingPoint[variables.parameterID[i]] * geometry.controlVolume[i];
+				// the order of the operations is WHETGEO's (ComputeQuantitiesRichardsRoot), for the same bits
+				variables.ETs[i] = Math.min(requested[i] / 1000 / timeDelta * dt, Math.max(available, 0.0));
+				variables.sumETs += variables.ETs[i];
+				applied[i] += variables.ETs[i] * WATER_DENSITY;
 			}
 			for (int picard = 0; picard < properties.picardIterations(); picard++) {
 				if (frozen) {
@@ -284,7 +337,7 @@ public final class SoilWaterDriver {
 		double infiltration = -faceWater[cells];
 		double runoff = saturatedTop ? Math.max(input - infiltration, 0.0) : 0.0;
 		return new SoilWaterStepResult(suctions(), faceWater, infiltration, -faceWater[0], storageChange, error,
-				runoff);
+				runoff, applied);
 	}
 
 	private void iceVolumes(double[] volumes) {

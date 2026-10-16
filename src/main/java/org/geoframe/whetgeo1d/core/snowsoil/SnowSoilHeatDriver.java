@@ -227,6 +227,17 @@ public final class SnowSoilHeatDriver {
 	 */
 	public double transportSoilWater(double[] newSuctions, double[] faceWater, double topEnergy, double[] oldHidden,
 			double[] newHidden) {
+		return transportSoilWater(newSuctions, faceWater, topEnergy, oldHidden, newHidden, new double[column.soilCells()]);
+	}
+
+	/**
+	 * Same, with water taken from the cells by evapotranspiration [kg m-2],
+	 * leaving with the energy of liquid water at the temperature of its cell
+	 * (the latent heat of vaporisation belongs to the surface balance). The
+	 * energy removed is {@link #sinkEnergy}.
+	 */
+	public double transportSoilWater(double[] newSuctions, double[] faceWater, double topEnergy, double[] oldHidden,
+			double[] newHidden, double[] sinks) {
 		int n = column.soilCells();
 		if (newSuctions.length != n || faceWater.length != n + 1) {
 			throw new IllegalArgumentException("expected " + n + " suctions and " + (n + 1) + " face fluxes");
@@ -244,13 +255,23 @@ public final class SnowSoilHeatDriver {
 		double[] target = new double[n];
 		for (int i = 0; i < n; i++) {
 			target[i] = soilEnergy(i, t[i], variables.waterSuctions[i]) + oldHidden[i] * liquidEnergy(t[i])
-					+ faceEnergy[i] - faceEnergy[i + 1];
+					+ faceEnergy[i] - faceEnergy[i + 1] - sinks[i] * liquidEnergy(t[i]);
 		}
 		for (int i = 0; i < n; i++) {
 			variables.waterSuctions[i] = newSuctions[i];
 			t[i] = invertSoilEnergy(i, target[i], newSuctions[i], newHidden[i], t[i]);
 		}
 		return -faceEnergy[0];
+	}
+
+	/** Energy that the given sinks take from the soil at its current temperatures [J m-2]. */
+	public double sinkEnergy(double[] sinks) {
+		double[] t = column.variables().temperatures;
+		double sum = 0.0;
+		for (int i = 0; i < sinks.length; i++) {
+			sum += sinks[i] * liquidEnergy(t[i]);
+		}
+		return sum;
 	}
 
 	/** Internal energy of liquid water per kg at T in the soil closures' reference [J kg-1]. */
