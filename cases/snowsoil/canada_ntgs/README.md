@@ -84,10 +84,14 @@ The forcing is GEOtop's own, computed by the temporary fidelity tools (`GeotopFo
 
 - **Bare soil:** the column has no bare-soil energy balance. Without snow at the start of a step, GEOtop's `Tsurface` is the Dirichlet top, at the surface face of the top cell. When GEOtop still has snow and the column has none, that value is GEOtop's snow-surface temperature.
 - **Evaporation:** irrelevant with fixed water, so not passed.
+- **Ported since the first runs (round 4), active in fidelity:**
+  - GEOtop's thin-snow regime: soil roughness and emissivity below `ThresSnowSoilRough` = `SoilRoughness` = 10 mm by default, so a few days in autumn;
+  - GEOtop's snow–soil and snow–snow face conductance (SNOW-3);
+  - GEOtop's porosity cap at ρw (SNOW-6).
+
+  On NTGS1 ERA5 only the face conductance moves the soil, by −0.15 K at every depth. The other two change it by less than 0.01 K. `-DthinSnowRegime=None`, `-DfaceConductance=Harmonic_Mean` and `-DporosityCap=Ice_Density` (through `SIM_OPTS`) restore the previous behaviour.
 - **Not ported:**
-  - thin-snow roughness and emissivity: below `ThresSnowSoilRough` = `SoilRoughness` = 10 mm by default, so a few days in autumn;
   - shortwave penetration (SNOW-7) and delayed refreezing (STA-3);
-  - GEOtop's snow–soil interface conductance (SNOW-3; the column uses the harmonic mean);
   - GEOtop's recomputation of the turbulence without stable correction inside the Newton loop (see Results).
 
 ### Step control
