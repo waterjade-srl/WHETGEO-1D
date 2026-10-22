@@ -1,6 +1,7 @@
 #!/bin/bash
 # Runs the Friuli case on the given stations (default: all four), from the root of the repository.
 #   cases/snowsoil/friuli/run_all.sh [1 2 3 4]
+#   STABILITY="Unstable only" cases/snowsoil/friuli/run_all.sh    (sensitivity: GEOtop MoninObukhov = 2)
 # Writes output/station_<n>/ (NetCDF, GEOtop-like CSV) and output/station_<n>.log, and prints the
 # wall time of each run and the step rejections the controller logged (SOL-5).
 set -euo pipefail
@@ -14,9 +15,10 @@ mkdir -p "$CASE/output"
 STATIONS=${*:-1 2 3 4}
 for s in $STATIONS; do
   start=$(date +%s.%N)
-  java -Dstation="$s" -Doms.prj="$CASE" -cp "$OMS:target/classes:$(cat target/cp.txt)" \
-       oms3.CLI -r "$CASE/snowsoil_friuli.sim" > "$CASE/output/station_$s.log" 2>&1
+  log="$CASE/output/station_$s${STABILITY:+_${STABILITY// /_}}.log"
+  java -Dstation="$s" -Dstability="${STABILITY:-}" -Doms.prj="$CASE" -cp "$OMS:target/classes:$(cat target/cp.txt)" \
+       oms3.CLI -r "$CASE/snowsoil_friuli.sim" > "$log" 2>&1
   end=$(date +%s.%N)
   printf 'station %s: %.1f s, %s\n' "$s" "$(echo "$end - $start" | bc)" \
-         "$(grep "snowsoil: .* steps," "$CASE/output/station_$s.log" || true)"
+         "$(grep "snowsoil: .* steps," "$log" || true)"
 done

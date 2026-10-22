@@ -22,11 +22,17 @@
  *        oms3.CLI -r cases/snowsoil/friuli/snowsoil_friuli.sim
  *
  * or cases/snowsoil/friuli/run_all.sh for the four stations. Outputs in
- * output/station_<n>/ (NetCDF and GEOtop-like CSV).
+ * output/station_<n>/ (NetCDF and GEOtop-like CSV). With
+ * -Dstability="Unstable only" the stability correction of the GEOtop runs
+ * (MoninObukhov = 2) replaces the configuration's, outputs in
+ * output/station_<n>_unstable_only/: a sensitivity run, not the reference.
  */
 import oms3.SimBuilder as OMS3
 
 def station = (System.getProperty("station") ?: "1") as int
+// optional: -Dstability="Unstable only" (GEOtop MoninObukhov = 2, the option of the GEOtop runs); empty: the configuration's
+def stability = System.getProperty("stability") ?: ""
+def suffix = stability ? "_" + stability.toLowerCase().replace(" ", "_") : ""
 // latitude, longitude, elevation of the stations (one line each: the OMS preprocessor reads def lines one by one)
 def latitude  = [1: 46.4518, 2: 46.46722, 3: 46.4662, 4: 46.48414][station]
 def longitude = [1: 12.62653, 2: 12.68198, 3: 12.71044, 4: 12.72301][station]
@@ -97,6 +103,7 @@ new OMS3().sim(name: "snowsoil_friuli_${station}") {
             // configuration (ARCH-6): the plan runs Friuli in the recommended configuration
             "snowsoil.configuration"          "recommended"
             "snowsoil.soilWaterMode"          "Fixed"
+            "snowsoil.stabilityCorrection"    "${stability}"
             "snowsoil.windHeight"             5.0
             "snowsoil.temperatureHeight"      2.0
 
@@ -126,7 +133,7 @@ new OMS3().sim(name: "snowsoil_friuli_${station}") {
 
             // run header and outputs
             "snowsoil.inputFiles"             "${data}/airTemperature.csv,${data}/relativeHumidity.csv,${data}/windSpeed.csv,${data}/pressure.csv,${data}/precipitation.csv,${data}/cloudTransmissivity.csv"
-            "snowsoil.outputPath"             "$oms_prj/output/station_${station}"
+            "snowsoil.outputPath"             "$oms_prj/output/station_${station}${suffix}"
         }
 
         connect {
