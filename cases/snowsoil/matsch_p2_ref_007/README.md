@@ -5,7 +5,7 @@ This case is the snow+soil column in the *fidelity* configuration on GEOtop 3.0'
 The reference differs from the official case in four ways:
 
 - `CanopyFraction = 0`, because the canopy is out of the port's scope (SCOPE-1);
-- the meteo file's `JDfrom0` column is put right: in the official file it is one day behind the dates, and GEOtop trusts it over the dates (`fixing_dates`, `meteodata.cc:583`);
+- the meteo file's `JDfrom0` column and `HeaderJulianDayfrom0Meteo` are dropped, so the records are dated by `Date`. In the official file that column is one day behind the dates, and GEOtop trusts it over the dates (`fixing_dates`, `meteodata.cc:583`). This needs the inline `!` comments stripped from `geotop.inpts`, because GEOtop's parser keeps them: `MeteoStationStandardTime = 1 ! added by ... 2.1` reads as 1e21, which only `fixing_dates` uses (`readline_par`, `find_number`, `src/libraries/ascii/tabs.cc:159-189, 277-345`);
 - `ActualOrProjectedArea = 1` is set: without it GEOtop projects the precipitation a second time in a point simulation, `P cos²β` (`energy.balance.cc:299-304`);
 - the empty `CloudTrans` column (-9999) is dropped: with it GEOtop never computes the daily cloudiness from the measured shortwave (`input.cc:405-408`), and falls back to Kimball from T and RH.
 
@@ -32,7 +32,7 @@ The run needs JDK 21, Maven (offline works) and `oms-3.5.12.jar` in the local Ma
 
 | Path | Content |
 |---|---|
-| `geotop/` | the corrected GEOtop 3.0 run without canopy, produced by `casi/Matsch_P2_Ref_007/run.sh corretta` of the GEO2GEO workspace (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt`; `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `adc1d23e…2338` |
+| `geotop/` | the corrected GEOtop 3.0 run without canopy, produced by `casi/Matsch_P2_Ref_007/run.sh corretta` of the GEO2GEO workspace (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, Date only, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt`; `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `5fae8eba…` |
 | `forcing.properties` | the case's settings for the forcing tools |
 | `data/` | OMS CSV forcing at 900 s, written by `run.sh` (`GeotopForcingFiles`) |
 | `grid/` | the soil as WHETGEO-1D CSV inputs |
@@ -45,11 +45,11 @@ The forcing is GEOtop's own forcing, computed from GEOtop's input files by the t
 
 | Quantity | How GEOtop computes it | Max difference |
 |---|---|---|
-| Ta, RH, wind | step means of the meteo file, dated by its `JDfrom0` column as GEOtop does | 1e-8 °C, 5e-5, 0.013 m s⁻¹ |
+| Ta, RH, wind | step means of the meteo file, dated by `Date`; a step that starts at a record also checks it for no value, as GEOtop does | 2e-15 |
 | pressure | 1013.25 e^(−z/8500) hPa | 2e-7 hPa |
 | rain, snow | linear ramp −3.2…3 °C, `SnowCorrFactor` 1.398 applied at the station, split again at the point, times cos β (the flux per unit area of a column normal to the slope) | 5e-7 mm |
-| SW beam and diffuse | on the slope: Iqbal clear sky, Erbs diffuse fraction, τ_c from the measured global SW. The point horizon is flat; the station horizon is used only for the cloudiness | 6e-4 W m⁻² |
-| LW in | Idso + Hodges (`LWinParameterization = 4`) with GEOtop's daily cloudiness from the measured SW (`DailyCloudiness.geotopSeries`; the series matches the one GEOtop writes back to 5e-7), and Kimball/Walcek before the first daylight period, as GEOtop | 3e-3 W m⁻² |
+| SW beam and diffuse | on the slope: Iqbal clear sky, Erbs diffuse fraction, τ_c from the measured global SW. The point horizon is flat; the station horizon is used only for the cloudiness | 6e-7 W m⁻² |
+| LW in | Idso + Hodges (`LWinParameterization = 4`) with GEOtop's daily cloudiness from the measured SW (`DailyCloudiness.geotopSeries`; the series matches the one GEOtop writes back to 5e-7), and Kimball/Walcek where the series is undefined, as GEOtop | 5e-7 W m⁻² |
 
 Two quantities are fallbacks, taken from GEOtop's own output (DN-14):
 

@@ -21,7 +21,7 @@ EnergyBalance	=	1
 DtPlotDischarge	=	1
 DtPlotBasin	=	1
 DtPlotPoint	=	1
-StandardTimeSimulation	=	1 ! modified by Elisa Bortoli
+StandardTimeSimulation	=	1
 
 !Catchmentcentroid(for Sun position)
 Latitude	=	46.668
@@ -48,14 +48,14 @@ MeteoStationElevation	=	1549
 MeteoStationWindVelocitySensorHeight	=	2.5
 MeteoStationTemperatureSensorHeight	=	2
 
-MeteoStationStandardTime = 1 ! added by Elisa Bortoli to run with geotop 2.1
+MeteoStationStandardTime = 1
 
 !======================================= 
 ! METEO HAEDERS 
 !======================================= 
 
 HeaderDateDDMMYYYYhhmmMeteo	=	"Date"
-HeaderJulianDayfrom0Meteo	=	"JDfrom0"
+!HeaderJulianDayfrom0Meteo	=	"JDfrom0"
 HeaderIPrec			= 	"Iprec"
 HeaderWindVelocity		= 	"WindSp"
 HeaderWindDirection		= 	"WindDir"

@@ -299,18 +299,6 @@ public final class GeotopForcing {
 	}
 
 	private double stepMeanOfSeries(double begin, double end) {
-		double[] jd = meteo.julianDays();
-		double sum = 0.0;
-		for (int i = 1; i < jd.length && jd[i - 1] < end; i++) {
-			double a = Math.max(jd[i - 1], begin);
-			double b = Math.min(jd[i], end);
-			if (b > a) {
-				if (Double.isNaN(averagedSeries[i])) {
-					return Double.NaN;
-				}
-				sum += averagedSeries[i] * (b - a);
-			}
-		}
-		return sum / (end - begin);
+		return GeotopMeteo.stepMean(meteo.julianDays(), averagedSeries, begin, end);
 	}
 }
