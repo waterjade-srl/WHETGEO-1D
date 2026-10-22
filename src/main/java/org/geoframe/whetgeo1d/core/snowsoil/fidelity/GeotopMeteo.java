@@ -42,7 +42,8 @@ import java.util.Map;
  * columns of a file disagree GEOtop follows the JDfrom0 column
  * ({@code fixing_dates}, {@code meteodata.cc:583-621}). In the official
  * Matsch_P2_Ref_007 file that column is one day behind the dates, a data
- * error: the corrected reference has the column put right.</li>
+ * error: the corrected reference drops the column and dates the records by
+ * their dates.</li>
  * <li><b>Stepping.</b> Without {@code LinearInterpolation} (the default)
  * GEOtop averages over each step [t<sub>b</sub>, t<sub>e</sub>] the piecewise
  * constant series in which record i holds over (t<sub>i-1</sub>,
@@ -135,20 +136,36 @@ public record GeotopMeteo(double[] julianDays, Map<String, double[]> columns) {
 	 */
 	public double stepMean(String header, double begin, double end) {
 		double[] v = columns.get(header);
-		if (v == null || !(end > begin) || begin < julianDays[0] || end > julianDays[julianDays.length - 1]) {
+		return v == null ? Double.NaN : stepMean(julianDays, v, begin, end);
+	}
+
+	/**
+	 * {@link #stepMean(String, double, double)} of any series on the records.
+	 * As in GEOtop, a step that starts exactly at a record also checks that
+	 * record: with no value there the step has none ({@code find_line_data}
+	 * takes the interval that ends at the record, {@code meteodata.cc:371-408}).
+	 */
+	public static double stepMean(double[] julianDays, double[] v, double begin, double end) {
+		if (!(end > begin) || begin < julianDays[0] || end > julianDays[julianDays.length - 1]) {
 			return Double.NaN;
 		}
 		double sum = 0.0;
 		for (int i = 1; i < julianDays.length && julianDays[i - 1] < end; i++) {
 			double a = Math.max(julianDays[i - 1], begin);
 			double b = Math.min(julianDays[i], end);
-			if (b > a) {
+			boolean atStart = Math.abs(julianDays[i] - begin) < BOUNDARY;
+			if (b > a || atStart) {
 				if (Double.isNaN(v[i])) {
 					return Double.NaN;
 				}
-				sum += v[i] * (b - a);
+				if (b > a) {
+					sum += v[i] * (b - a);
+				}
 			}
 		}
 		return sum / (end - begin);
 	}
+
+	/** Two times closer than this are the same instant [d] (about 0.1 ms). */
+	private static final double BOUNDARY = 1e-9;
 }

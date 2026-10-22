@@ -40,7 +40,7 @@ import org.junit.Test;
 /**
  * The fidelity forcing tools against what GEOtop 3.0 (commit 1f1fc5af) wrote
  * in the point output of the corrected Matsch_P2_Ref_007 without canopy
- * ({@code cases/snowsoil/matsch_p2_ref_007/geotop}: JDfrom0 put right,
+ * ({@code cases/snowsoil/matsch_p2_ref_007/geotop}: dates from the Date column,
  * {@code ActualOrProjectedArea = 1}, no cloud column): each hourly row of
  * GEOtop is the mean (fluxes, states) or the sum (precipitation) of its four
  * 900 s steps, which the tools compute here one by one.
@@ -159,9 +159,9 @@ public class GeotopForcingTest {
 
 	@Test
 	public void shortwaveOnTheSlope() {
-		assertTrue(compare("SWin", "SWin[W/m2]")[0] < 1e-2);
-		assertTrue(compare("SWbeam", "SWbeam[W/m2]")[0] < 1e-2);
-		assertTrue(compare("SWdiff", "SWdiff[W/m2]")[0] < 1e-2);
+		assertTrue(compare("SWin", "SWin[W/m2]")[0] < 1e-5);
+		assertTrue(compare("SWbeam", "SWbeam[W/m2]")[0] < 1e-5);
+		assertTrue(compare("SWdiff", "SWdiff[W/m2]")[0] < 1e-5);
 	}
 
 	@Test
@@ -187,8 +187,8 @@ public class GeotopForcingTest {
 
 	@Test
 	public void longwaveIdsoHodgesWithShortwaveClouds() {
-		assertTrue(compare("LWmin", "LWin_min[W/m2]")[0] < 1e-2);
-		assertTrue(compare("LWin", "LWin[W/m2]")[0] < 1e-2);
+		assertTrue(compare("LWmin", "LWin_min[W/m2]")[0] < 1e-5);
+		assertTrue(compare("LWin", "LWin[W/m2]")[0] < 1e-5);
 	}
 
 	@Test
