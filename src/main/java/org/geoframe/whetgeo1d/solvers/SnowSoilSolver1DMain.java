@@ -45,6 +45,8 @@ import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
 import org.geoframe.whetgeo1d.core.snowsoil.RunDiagnostics;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowProcesses;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilRestart;
+import org.geoframe.whetgeo1d.core.snowsoil.ThinSnow;
+import org.geoframe.whetgeo1d.snow.GeotopCompaction;
 import org.geoframe.whetgeo1d.core.snowsoil.StepNotConvergedException;
 import org.geoframe.whetgeo1d.core.snowsoil.StepRejection;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
@@ -272,6 +274,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Conductance of the snow faces (SNOW-3): Harmonic Mean or Geotop Mean Of Arguments; empty: GEOtop's in fidelity, harmonic in recommended.")
 	@In
 	public String faceConductance = "";
+
+	@Description("Thin-snow regime (GEOtop's soil roughness and emissivity under a thin pack): Geotop or None; empty: GEOtop's in fidelity, none in recommended. For sensitivity runs.")
+	@In
+	public String thinSnowRegime = "";
+
+	@Description("Porosity cap of the compaction (SNOW-6): Geotop (rho_w, may thicken) or Ice Density; empty: GEOtop's in fidelity. For sensitivity runs.")
+	@In
+	public String porosityCap = "";
 
 	@Description("Stability correction of the turbulent fluxes over snow (Both, Unstable only, Stable only, Neutral); empty: the configuration's.")
 	@In
@@ -913,6 +923,18 @@ public class SnowSoilSolver1DMain extends HMModel {
 			processes = withStability(processes, EnumUtils.fromString(StabilityCorrection.class, stabilityCorrection));
 		}
 		processes = GeotopSnowParameters.parse(geotopSnowParameters).apply(processes);
+		if (thinSnowRegime != null && !thinSnowRegime.isBlank()) {
+			processes = processes.withThinSnow(thinSnowRegime.trim().equalsIgnoreCase("none") ? ThinSnow.none()
+					: processes.thinSnow().roughnessThreshold() > 0.0 ? processes.thinSnow() : ThinSnow.geotop());
+		}
+		if (porosityCap != null && !porosityCap.isBlank()
+				&& processes.compaction() instanceof GeotopCompaction compaction) {
+			GeotopCompaction.Parameters c = compaction.parameters();
+			boolean geotopCap = porosityCap.trim().equalsIgnoreCase("geotop");
+			processes = processes.withCompaction(new GeotopCompaction(new GeotopCompaction.Parameters(
+					c.maxIceVolumeFraction(), c.dryDeformationRate(), c.densityCutoff(), c.wetDeformationRate(),
+					c.viscosity(), c.minimumIceMass(), geotopCap), processes.equationOfState()));
+		}
 		SnowThermalConductivity conductivity = snowThermalConductivity == null || snowThermalConductivity.isBlank()
 				? (fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991)
 				: EnumUtils.fromString(SnowThermalConductivity.class, snowThermalConductivity);

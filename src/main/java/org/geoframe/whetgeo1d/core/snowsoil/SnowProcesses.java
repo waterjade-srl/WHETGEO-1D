@@ -144,6 +144,12 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling, thinSnow);
 	}
 
+	/** Same processes with another compaction. */
+	public SnowProcesses withCompaction(CompactionModel model) {
+		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, model,
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow);
+	}
+
 	/** Same processes with another thin-snow regime. */
 	public SnowProcesses withThinSnow(ThinSnow regime) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,

@@ -38,6 +38,10 @@ def heatTolerance = (System.getProperty("heatTolerance") ?: "1e-3") as double
 // the component's default: a step that does not converge stops the run, saving the last accepted state
 def onNonConvergence = System.getProperty("onNonConvergence") ?: "Stop"
 def label = System.getProperty("label") ? "_" + System.getProperty("label") : ""
+// round-4 attribution runs: -DthinSnowRegime=None, -DporosityCap=Ice_Density, -DfaceConductance=Harmonic_Mean (empty: fidelity's)
+def thinSnowRegime = (System.getProperty("thinSnowRegime") ?: "").replace("_", " ")
+def porosityCap = (System.getProperty("porosityCap") ?: "").replace("_", " ")
+def faceConductance = (System.getProperty("faceConductance") ?: "").replace("_", " ")
 
 new OMS3().sim(name: "snowsoil_canada_ntgs") {
 
@@ -144,6 +148,9 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.windHeight"             10.0
             "snowsoil.temperatureHeight"      10.0
             "snowsoil.alphaSnow"              1e5
+            "snowsoil.thinSnowRegime"         thinSnowRegime
+            "snowsoil.porosityCap"            porosityCap
+            "snowsoil.faceConductance"        faceConductance
             "snowsoil.heatTolerance"          heatTolerance
             "snowsoil.onNonConvergence"       onNonConvergence
             "snowsoil.maxSnowCells"           10
