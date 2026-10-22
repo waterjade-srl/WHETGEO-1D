@@ -1,0 +1,191 @@
+/*
+ * Fidelity run on Matsch_P2_Ref_007 without canopy (GEO2GEO, phase 2.1), with the
+ * bare-soil energy balance: as snowsoil_matsch_p2_ref_007.sim, but without snow the
+ * top of the soil has its own energy balance instead of GEOtop's Tsurface; the soil
+ * evaporation is still GEOtop's Evap_surface (conditioned input, LINK-2).
+ *
+ * The GEOtop 3.0 official 1D test, station P2 in Val Mazia, 46.668 N,
+ * 10.579 E, 1549 m, slope 21.4°, aspect 221.6°, 2 October - 2 November 2009,
+ * steps of 900 s, hourly outputs, with CanopyFraction = 0 (the strict
+ * reference: casi/Matsch_P2_Ref_007/run.sh corretta, three errors of the official case removed). See README.md.
+ *
+ * Forcing: data/*.csv, written by run.sh with the temporary fidelity tools
+ * (org.geoframe.whetgeo1d.core.snowsoil.fidelity) from GEOtop's own input
+ * files, as GEOtop steps and computes them; bare-soil surface temperature and
+ * soil evaporation from GEOtop's point output (fallback, the column has no
+ * bare-soil energy balance and no evapotranspiration of its own).
+ *
+ * Run with ./run.sh (it writes the forcing, then runs this file with
+ * oms-3.5.12.jar first on the classpath).
+ */
+import oms3.SimBuilder as OMS3
+
+def startDate = "2009-10-01 23:15"
+def endDate   = "2009-11-02 22:00"
+def timestep  = 15
+
+new OMS3().sim(name: "snowsoil_matsch_p2_ref_007_seb") {
+
+    model(while: "reader_airT.doProcess") {
+
+        components {
+            "reader_airT"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_rh"     "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_wind"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_p"      "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_rain"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_snow"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_swb"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_swd"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_cos"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_lw"     "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_ts"     "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_evap"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "snowsoil"      "org.geoframe.whetgeo1d.solvers.SnowSoilSolver1DMain"
+        }
+
+        parameter {
+            "reader_airT.file"         "$oms_prj/data/airTemperature.csv"
+            "reader_airT.idfield"  "ID"
+            "reader_airT.tStart"  "${startDate}"
+            "reader_airT.tEnd"  "${endDate}"
+            "reader_airT.tTimestep"  "${timestep}"
+            "reader_airT.fileNovalue"  "-9999.0"
+
+            "reader_rh.file"         "$oms_prj/data/relativeHumidity.csv"
+            "reader_rh.idfield"  "ID"
+            "reader_rh.tStart"  "${startDate}"
+            "reader_rh.tEnd"  "${endDate}"
+            "reader_rh.tTimestep"  "${timestep}"
+            "reader_rh.fileNovalue"  "-9999.0"
+
+            "reader_wind.file"         "$oms_prj/data/windSpeed.csv"
+            "reader_wind.idfield"  "ID"
+            "reader_wind.tStart"  "${startDate}"
+            "reader_wind.tEnd"  "${endDate}"
+            "reader_wind.tTimestep"  "${timestep}"
+            "reader_wind.fileNovalue"  "-9999.0"
+
+            "reader_p.file"         "$oms_prj/data/pressure.csv"
+            "reader_p.idfield"  "ID"
+            "reader_p.tStart"  "${startDate}"
+            "reader_p.tEnd"  "${endDate}"
+            "reader_p.tTimestep"  "${timestep}"
+            "reader_p.fileNovalue"  "-9999.0"
+
+            "reader_rain.file"         "$oms_prj/data/rainfall.csv"
+            "reader_rain.idfield"  "ID"
+            "reader_rain.tStart"  "${startDate}"
+            "reader_rain.tEnd"  "${endDate}"
+            "reader_rain.tTimestep"  "${timestep}"
+            "reader_rain.fileNovalue"  "-9999.0"
+
+            "reader_snow.file"         "$oms_prj/data/snowfall.csv"
+            "reader_snow.idfield"  "ID"
+            "reader_snow.tStart"  "${startDate}"
+            "reader_snow.tEnd"  "${endDate}"
+            "reader_snow.tTimestep"  "${timestep}"
+            "reader_snow.fileNovalue"  "-9999.0"
+
+            "reader_swb.file"         "$oms_prj/data/shortwaveDirect.csv"
+            "reader_swb.idfield"  "ID"
+            "reader_swb.tStart"  "${startDate}"
+            "reader_swb.tEnd"  "${endDate}"
+            "reader_swb.tTimestep"  "${timestep}"
+            "reader_swb.fileNovalue"  "-9999.0"
+
+            "reader_swd.file"         "$oms_prj/data/shortwaveDiffuse.csv"
+            "reader_swd.idfield"  "ID"
+            "reader_swd.tStart"  "${startDate}"
+            "reader_swd.tEnd"  "${endDate}"
+            "reader_swd.tTimestep"  "${timestep}"
+            "reader_swd.fileNovalue"  "-9999.0"
+
+            "reader_cos.file"         "$oms_prj/data/cosIncidence.csv"
+            "reader_cos.idfield"  "ID"
+            "reader_cos.tStart"  "${startDate}"
+            "reader_cos.tEnd"  "${endDate}"
+            "reader_cos.tTimestep"  "${timestep}"
+            "reader_cos.fileNovalue"  "-9999.0"
+
+            "reader_lw.file"         "$oms_prj/data/longwaveIn.csv"
+            "reader_lw.idfield"  "ID"
+            "reader_lw.tStart"  "${startDate}"
+            "reader_lw.tEnd"  "${endDate}"
+            "reader_lw.tTimestep"  "${timestep}"
+            "reader_lw.fileNovalue"  "-9999.0"
+
+            "reader_ts.file"         "$oms_prj/data/surfaceTemperature.csv"
+            "reader_ts.idfield"  "ID"
+            "reader_ts.tStart"  "${startDate}"
+            "reader_ts.tEnd"  "${endDate}"
+            "reader_ts.tTimestep"  "${timestep}"
+            "reader_ts.fileNovalue"  "-9999.0"
+
+            "reader_evap.file"         "$oms_prj/data/evaporation.csv"
+            "reader_evap.idfield"  "ID"
+            "reader_evap.tStart"  "${startDate}"
+            "reader_evap.tEnd"  "${endDate}"
+            "reader_evap.tTimestep"  "${timestep}"
+            "reader_evap.fileNovalue"  "-9999.0"
+
+
+            // fidelity configuration (GEOtop 3.0), Cosenza snow conductivity, MoninObukhov = 1 (both)
+            "snowsoil.configuration"          "fidelity"
+            "snowsoil.soilWaterMode"          "Richards"
+            "snowsoil.windHeight"             2.5
+            "snowsoil.temperatureHeight"      2.0
+            "snowsoil.alphaSnow"              1e5
+            "snowsoil.maxSnowCells"           10
+            // the case's snow keywords of geotop.inpts (GeotopSnowParameters)
+            "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.88, FreshSnowReflNIR=0.63, SnowAgingCoeffVis=0.1108, AlbExtParSnow=182, IrriducibleWatSatSnow=0.0595, SnowEmissiv=0.99, SnowRoughness=1.6, DrySnowDefRate=1.01, WetSnowDefRate=2.49, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=50, SWEtop=2000, MaxSnowLayersMiddle=50, PointSlope=21.4"
+            // SoilAlbVisDry/Wet = 0.15, SoilAlbNIRDry/Wet = 0.25
+            "snowsoil.groundAlbedo"             0.15
+            "snowsoil.groundAlbedoNearInfrared" 0.25
+            // GEOtop's thermal conductivity of water
+            "snowsoil.thermalConductivityWater" 0.567
+
+            // site
+            "snowsoil.stationID"              1
+            "snowsoil.latitude"               46.668
+            "snowsoil.longitude"              10.579
+            "snowsoil.standardTime"           1.0
+            "snowsoil.elevation"              1549.0
+            "snowsoil.tTimeStep"              900.0
+
+            // soil: 16 layers to 1 m, Van Genuchten with Dall'Amico freezing, psi(0) of GEOtop, T(0) = 4 °C
+            "snowsoil.soilGridFile"           "$oms_prj/grid"
+
+            // boundary conditions: bare-soil energy balance, SoilRoughness = 100 mm, SoilEmissiv = 0.96,
+            // albedo 0.15 / 0.25 (groundAlbedo above); zero heat flux at the bottom
+            // (Zboundary = 1e20, Fboundary = 0); impervious bottom (FreeDrainageAtBottom = 0)
+            "snowsoil.bareSoilTopType"        "Energy Balance"
+            "snowsoil.soilRoughness"          0.1
+            "snowsoil.soilEmissivity"         0.96
+            "snowsoil.bottomBCType"           "Bottom Neumann"
+            "snowsoil.bottomBCValue"          0.0
+            "snowsoil.soilWaterBottomType"    "Bottom Impervious"
+
+            "snowsoil.inputFiles"             "$oms_prj/forcing.properties,$oms_prj/geotop/meteo0001.txt,$oms_prj/geotop/horizon0001.txt,$oms_prj/geotop/output-tabs/point0001.txt"
+            "snowsoil.outputPath"             "$oms_prj/output_seb"
+            "snowsoil.outputInterval"         3600.0
+            // CSV dates in local standard time, as GEOtop writes them
+            "snowsoil.outputStandardTime"     1.0
+        }
+
+        connect {
+            "reader_airT.outData"   "snowsoil.inAirTemperature"
+            "reader_rh.outData"     "snowsoil.inRelativeHumidity"
+            "reader_wind.outData"   "snowsoil.inWindSpeed"
+            "reader_p.outData"      "snowsoil.inPressure"
+            "reader_rain.outData"   "snowsoil.inRainfall"
+            "reader_snow.outData"   "snowsoil.inSnowfall"
+            "reader_swb.outData"    "snowsoil.inShortwaveDirect"
+            "reader_swd.outData"    "snowsoil.inShortwaveDiffuse"
+            "reader_cos.outData"    "snowsoil.inCosIncidence"
+            "reader_lw.outData"     "snowsoil.inLongwaveIn"
+            "reader_evap.outData"   "snowsoil.inEvaporation"
+            "reader_airT.tCurrent"  "snowsoil.inCurrentDate"
+        }
+    }
+}

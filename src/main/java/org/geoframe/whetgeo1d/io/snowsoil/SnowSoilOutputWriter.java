@@ -22,6 +22,7 @@ import java.io.IOException;
 
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilStepResult;
+import org.geoframe.whetgeo1d.snow.surface.SurfaceFluxes;
 
 /**
  * Where the OMS3 snow+soil component sends what a run produces: the header
@@ -42,6 +43,15 @@ public interface SnowSoilOutputWriter extends AutoCloseable {
 	 * @param result       what the step returned
 	 */
 	void write(long epochSeconds, SnowSoilSolver solver, SnowSoilStepResult result) throws IOException;
+
+	/**
+	 * The bare-soil surface fluxes of the step about to be written, when the
+	 * component computes them (energy-balance top, no snow); null otherwise.
+	 * Called before {@link #write}, with the temperature of the surface [K];
+	 * writers that do not report them ignore it.
+	 */
+	default void bareSoilSurface(SurfaceFluxes fluxes, double surfaceTemperature) {
+	}
 
 	@Override
 	void close() throws IOException;

@@ -60,6 +60,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.CloudTransmissivity;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.IncomingLongwave;
 import org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopSnowParameters;
+import org.geoframe.whetgeo1d.core.snowsoil.BareSoilEnergyBalance;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
@@ -75,6 +76,7 @@ import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
 import org.geoframe.whetgeo1d.snow.SnowThermalConductivity;
 import org.geoframe.whetgeo1d.snow.surface.MoninObukhov;
 import org.geoframe.whetgeo1d.snow.surface.StabilityCorrection;
+import org.geoframe.whetgeo1d.snow.surface.SurfaceFluxes;
 import org.geoframe.whetgeo1d.snow.surface.SurfaceForcing;
 import org.hortonmachine.gears.libs.modules.HMModel;
 
@@ -225,7 +227,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 		/** Imposed flux into the soil [W m-2]. */
 		NEUMANN,
 		/** h (T_a - T_top), linearised with derivative -h. */
-		BULK_TRANSFER
+		BULK_TRANSFER,
+		/**
+		 * The energy balance of the bare soil ({@link BareSoilEnergyBalance}):
+		 * shortwave with the soil albedo, longwave with the soil emissivity,
+		 * sensible heat with the soil roughness, and the latent heat of the
+		 * evaporation given in {@code inEvaporation}.
+		 */
+		ENERGY_BALANCE
 	}
 
 	/** Heat condition at the top of the snow (COL-6). */
@@ -482,6 +491,18 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	@Unit("W m-2 K-1")
 	public double bareSoilTransfer = 10.0;
+	@Description("Energy Balance top: roughness length of the bare soil (GEOtop SoilRoughness, default 10 mm).")
+	@In
+	@Unit("m")
+	public double soilRoughness = 0.01;
+	@Description("Energy Balance top: emissivity of the bare soil (GEOtop SoilEmissiv).")
+	@In
+	public double soilEmissivity = 0.96;
+	@Description("Energy Balance top: albedo of the saturated soil, visible and near infrared; NaN: the dry ones (groundAlbedo, groundAlbedoNearInfrared).")
+	@In
+	public double groundAlbedoWet = Double.NaN;
+	@In
+	public double groundAlbedoNearInfraredWet = Double.NaN;
 	@In
 	public Map<Integer, double[]> inTopBC;
 
@@ -668,6 +689,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	public double outShortwaveGlobal;
 	@Out
 	public SnowSoilStepResult outStepResult;
+	@Description("Bare-soil surface fluxes of the step at its final top temperature, with the Energy Balance top and no snow; null otherwise.")
+	@Out
+	public SurfaceFluxes outBareSoilFluxes;
 	@Out
 	public RunHeader outRunHeader;
 	@Out
@@ -683,6 +707,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private IncomingLongwave.ClearSkyEmissivity emissivity;
 	private PrecipitationPartition partition;
 	private BareSoilTop bareSoilTop;
+	private BareSoilEnergyBalance bareSoilBalance;
+	private BareSoilEnergyBalance.Step bareSoilStep;
+	private double bareSoilStartTemperature;
+	private double bareSoilSkin = Double.NaN;
+	private double bareSoilConductance;
+	private SoilWaterContent topWaterContent;
+	private double topThetaR;
+	private double topThetaS;
 	private SnowTop snowTop;
 	private DiffusionBoundaryConditionType bottomType;
 	private double[] soilDepth;
@@ -705,7 +737,18 @@ public class SnowSoilSolver1DMain extends HMModel {
 		}
 		publish(result);
 		outRunDiagnostics = controller.diagnostics();
+		SurfaceFluxes bareSoil = null;
+		double skin = Double.NaN;
+		if (bareSoilStep != null && result.surface() == null) {
+			double[] t = solver.soilTemperatures();
+			skin = bareSoilStep.skinTemperature(bareSoilBalance, bareSoilStartTemperature, t[t.length - 1],
+					bareSoilConductance);
+			bareSoil = bareSoilStep.evaluate(bareSoilBalance, skin);
+		}
+		bareSoilSkin = skin;
+		outBareSoilFluxes = bareSoil;
 		for (SnowSoilOutputWriter writer : activeWriters) {
+			writer.bareSoilSurface(bareSoil, skin);
 			writer.write(end, solver, result);
 		}
 	}
@@ -894,6 +937,18 @@ public class SnowSoilSolver1DMain extends HMModel {
 				: new PrecipitationPartition.GeotopLinear(rainThreshold + MELTING_TEMPERATURE,
 						snowThreshold + MELTING_TEMPERATURE);
 		bareSoilTop = EnumUtils.fromString(BareSoilTop.class, bareSoilTopType);
+		if (bareSoilTop == BareSoilTop.ENERGY_BALANCE) {
+			double nir = Double.isNaN(groundAlbedoNearInfrared) ? groundAlbedo : groundAlbedoNearInfrared;
+			bareSoilBalance = new BareSoilEnergyBalance(
+					BareSoilEnergyBalance.soilTurbulence(processes.turbulence().parameters(), soilRoughness),
+					soilEmissivity, groundAlbedo, Double.isNaN(groundAlbedoWet) ? groundAlbedo : groundAlbedoWet, nir,
+					Double.isNaN(groundAlbedoNearInfraredWet) ? nir : groundAlbedoNearInfraredWet);
+			int topCell = n - 1;
+			int id = inParameterID[topCell];
+			topThetaR = thetaR[id];
+			topThetaS = thetaS[id];
+			topWaterContent = water == null ? null : SoilWaterContent.vanGenuchten(soil);
+		}
 		snowTop = EnumUtils.fromString(SnowTop.class, snowTopType);
 
 		Map<String, String> attributes = new LinkedHashMap<>();
@@ -911,6 +966,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("temperatureHeight", Double.toString(temperatureHeight));
 		attributes.put("soilWaterMode", EnumUtils.fromString(SoilWaterMode.class, soilWaterMode).name());
 		attributes.put("bareSoilTop", bareSoilTop.name());
+		if (bareSoilBalance != null) {
+			attributes.put("soilRoughness", Double.toString(soilRoughness));
+			attributes.put("soilEmissivity", Double.toString(soilEmissivity));
+		}
 		attributes.put("snowTop", snowTop.name());
 		attributes.put("bottomBC", bottomType.name());
 		attributes.put("soilWaterBottomBC", water == null ? "none" : water.bottomType().name());
@@ -1248,12 +1307,29 @@ public class SnowSoilSolver1DMain extends HMModel {
 		}
 
 		double[] soilT = solver.soilTemperatures();
+		double evaporation = value(inEvaporation);
+		evaporation = Double.isNaN(evaporation) || !solver.snow().isEmpty() ? 0.0 : Math.max(0.0, evaporation);
+		bareSoilStep = null;
+		if (bareSoilTop == BareSoilTop.ENERGY_BALANCE) {
+			// the skin of the previous step, or the top cell after snow or at the start
+			bareSoilStartTemperature = Double.isNaN(bareSoilSkin) ? soilT[soilT.length - 1] : bareSoilSkin;
+			bareSoilConductance = solver.topSoilConductivity() / spaceDeltaZ[spaceDeltaZ.length - 1];
+			double saturation = 1.0;
+			if (topWaterContent != null) {
+				double[] theta = topWaterContent.liquid(solver);
+				saturation = (theta[theta.length - 1] - topThetaR) / (topThetaS - topThetaR);
+			}
+			bareSoilStep = bareSoilBalance.atStartOfStep(surface, bareSoilStartTemperature, saturation,
+					evaporation / dt);
+		}
 		TopBoundary top = switch (bareSoilTop) {
 		case DIRICHLET -> new TopBoundary.SurfaceTemperature(series(inTopBC, bareSoilTopValue, "bare-soil top")
 				+ MELTING_TEMPERATURE);
 		case NEUMANN -> TopBoundary.SurfaceFlux.constant(series(inTopBC, bareSoilTopValue, "bare-soil top"));
 		case BULK_TRANSFER -> new TopBoundary.SurfaceFlux(bareSoilTransfer * (ta - soilT[soilT.length - 1]),
 				-bareSoilTransfer);
+		case ENERGY_BALANCE -> bareSoilStep.topBoundary(bareSoilBalance, bareSoilStartTemperature,
+				soilT[soilT.length - 1], bareSoilConductance);
 		};
 		double bottom = switch (bottomType) {
 		case BOTTOM_DIRICHLET -> series(inBottomBC, bottomBCValue, "bottom") + MELTING_TEMPERATURE;
@@ -1262,8 +1338,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		};
 		double waterBottom = series(inSoilWaterBottomBC, soilWaterBottomValue, "soil water bottom");
 		double[] sinks = null;
-		double evaporation = value(inEvaporation);
-		if (!Double.isNaN(evaporation) && evaporation > 0.0 && solver.snow().isEmpty()) {
+		if (evaporation > 0.0) {
 			sinks = new double[soilT.length];
 			sinks[sinks.length - 1] = evaporation;
 		}

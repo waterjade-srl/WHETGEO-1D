@@ -210,13 +210,18 @@ public class SnowSoilOutputWritersTest {
 			double[] runoff = values(nc, "snowRunoff");
 			double[] steps = values(nc, "steps");
 			double[] hs = values(nc, "snowDepth");
+			Array tMean = nc.findVariable("Tmean").read();
+			Array tEnd = nc.findVariable("T").read();
+			int nSoil = header.soilDepth().length;
 			assertEquals(DAYS * 4, time.length);
 			int k = 0;
 			for (int r = 0; r < time.length; r++) {
 				double m = 0.0;
 				double v = 0.0;
 				double q = 0.0;
+				double[] mean = new double[nSoil];
 				int n = 0;
+				int first = k;
 				while (STEPS.get(k).time() < time[r]) {
 					m += STEPS.get(k).melt();
 					v += STEPS.get(k).vapour();
@@ -236,6 +241,17 @@ public class SnowSoilOutputWritersTest {
 				assertEquals(v, vapour[r], 1e-12);
 				assertEquals(q, runoff[r], 1e-12);
 				assertEquals(last.hs(), hs[r], 0.0);
+				// the soil temperature of the record: at its end, and averaged over its steps
+				// (GEOtop's SoilAveragedTempProfileFile)
+				for (int j = first; j <= k; j++) {
+					for (int i = 0; i < nSoil; i++) {
+						mean[i] += STEPS.get(j).soilT()[i] / n;
+					}
+				}
+				for (int i = 0; i < nSoil; i++) {
+					assertEquals(last.soilT()[i], tEnd.getDouble(r * nSoil + i), 0.0);
+					assertEquals(mean[i], tMean.getDouble(r * nSoil + i), 1e-9);
+				}
 				k++;
 			}
 		}

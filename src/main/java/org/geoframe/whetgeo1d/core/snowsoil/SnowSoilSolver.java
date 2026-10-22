@@ -177,6 +177,15 @@ public final class SnowSoilSolver {
 		return surfaceAge;
 	}
 
+	/**
+	 * Thermal conductivity of the top soil cell at the current state [W m-1
+	 * K-1], for a surface balance through a skin node outside the solver
+	 * ({@link BareSoilEnergyBalance}); NaN without soil.
+	 */
+	public double topSoilConductivity() {
+		return heat.topSoilConductivity();
+	}
+
 	/** Current soil temperatures [K], bottom first. */
 	public double[] soilTemperatures() {
 		return heat.soilTemperatures();

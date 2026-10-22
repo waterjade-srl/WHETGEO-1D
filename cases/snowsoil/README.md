@@ -124,7 +124,7 @@ Every value is either a constant (`...Value`) or a time series (`in...`). Where 
 | Where | Option | Choices | Value |
 |---|---|---|---|
 | heat, top of the snow | `snowTopType` | `Surface Energy Balance` (default), `Dirichlet`, `Neumann` | `snowTopValue` / `inSnowTopBC`: °C (capped at 0 °C over snow) or W m⁻² into the snow |
-| heat, top of bare soil | `bareSoilTopType` | `Bulk Transfer` (default, h (Ta − T_top) with h = `bareSoilTransfer`), `Dirichlet`, `Neumann` | `bareSoilTopValue` / `inTopBC`: °C or W m⁻² into the soil |
+| heat, top of bare soil | `bareSoilTopType` | `Bulk Transfer` (default, h (Ta − T_top) with h = `bareSoilTransfer`), `Dirichlet`, `Neumann`, `Energy Balance` (GEOtop 3.0's bare-soil balance through a skin node: `groundAlbedo`/`groundAlbedoNearInfrared` dry, `groundAlbedoWet`/`groundAlbedoNearInfraredWet` saturated, `soilEmissivity` 0.96, `soilRoughness` 0.01 m; latent heat of the evaporation given in `inEvaporation`) | `bareSoilTopValue` / `inTopBC`: °C or W m⁻² into the soil |
 | heat, bottom | `bottomBCType` | `Bottom No Gradient` (default), `Bottom Dirichlet`, `Bottom Neumann` | `bottomBCValue` / `inBottomBC`: °C or W m⁻² into the column |
 | water, bottom | `soilWaterBottomType` | `Bottom Free Drainage` (default), `Bottom Impervious`, `Bottom Dirichlet`, `Bottom Neumann` | `soilWaterBottomValue` / `inSoilWaterBottomBC`: ψ [m] for Dirichlet, inflow [m s⁻¹] for Neumann |
 
@@ -160,7 +160,7 @@ With `outputPath` set, the component writes to that folder:
   - the point quantities written to `point.csv`.
 - GEOtop-like CSV files:
   - `point.csv`, with the same quantities as GEOtop's `point` output;
-  - soil profiles: `soilTz.csv`, `psiz.csv`, `thetaliq.csv`, `thetaice.csv`;
+  - soil profiles: `soilTz.csv` (temperature at the end of the record), `soilTzav.csv` (mean over the record, as GEOtop's `SoilAveragedTempProfileFile`), `psiz.csv`, `thetaliq.csv`, `thetaice.csv`;
   - snow layers: `snowT.csv`, `snowDepth.csv`, `snowLiq.csv`, `snowIce.csv`.
 
 `outputInterval` [s] aggregates the records as GEOtop's `DtPlotPoint` does; 0 writes every step.

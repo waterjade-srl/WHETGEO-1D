@@ -158,6 +158,19 @@ public final class SnowSoilHeatDriver {
 		return new SnowSoilHeatDriver(null, snow, bottomType, settings);
 	}
 
+	/**
+	 * Thermal conductivity of the top soil cell at the current state [W m-1
+	 * K-1], from the soil closures of the heat step; NaN without soil.
+	 */
+	public double topSoilConductivity() {
+		int nSoil = column.soilCells();
+		if (nSoil == 0) {
+			return Double.NaN;
+		}
+		soilQuantities.computeThermalConductivity(nSoil);
+		return column.variables().lambdas[nSoil - 1];
+	}
+
 	/** Current soil temperatures [K], bottom first. */
 	public double[] soilTemperatures() {
 		return Arrays.copyOf(column.variables().temperatures, column.soilCells());
