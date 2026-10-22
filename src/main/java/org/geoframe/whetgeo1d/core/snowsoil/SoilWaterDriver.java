@@ -55,6 +55,22 @@ import org.geoframe.whetgeo1d.core.state.WGProblemQuantities;
  * of the liquid.
  *
  * <p>
+ * <b>Face conductivity of GEOtop</b> ({@value #GEOTOP_INTERFACE} as
+ * {@code interfaceHydraulicConductivityModel}, the fidelity configuration).
+ * GEOtop 3.0 does not average the conductivities of two cells
+ * ({@code find_matrix_K_3D}, {@code water.balance.cc:1007-1047}): it takes
+ * the conductivity of the cell the water comes from, at its own suction, and
+ * caps it with the smaller of the two cells' conductivities at saturation with
+ * their ice (ψ_sat(θ_i), with the impedance of the ice), so that a frozen cell
+ * draws water from below no faster than its own pores let it in. Every
+ * conductivity carries GEOtop's correction for the viscosity of water,
+ * 0.731495819 + 0.025263459766 T + 0.000158685828 T² (T in °C, its value at
+ * 0 °C below zero; {@code k_hydr_soil}, {@code pedo.funct.h:145-171}). WHETGEO's
+ * interface models (max, min, means) average two cell values and have neither
+ * the upwind cell nor the cap: with "max" a frozen cell above an unfrozen one
+ * receives the conductivity of the unfrozen cell.
+ *
+ * <p>
  * <b>Evapotranspiration</b> is an input, as in WHETGEO's
  * {@code RichardsSolverWithRootWaterUptake1D}, where GEOET provides it: water
  * taken from each cell in the step, passed to the kernel as its sink
@@ -73,6 +89,9 @@ public final class SoilWaterDriver {
 	private static final double WATER_DENSITY = 1000.0;
 	/** Water balance error of a step above which the Neumann top is considered failed [kg m-2]. */
 	private static final double FAILED_BALANCE = 1e-6;
+	/** The interface model name that selects GEOtop's face conductivity. */
+	public static final String GEOTOP_INTERFACE = "GEOtop";
+
 	/** Suction of the wilting point, -1.5 MPa: evapotranspiration does not dry a cell below it [m]. */
 	public static final double WILTING_SUCTION = -150.0;
 
@@ -90,6 +109,8 @@ public final class SoilWaterDriver {
 	private final double[] wiltingPoint;
 	private final double[] ice;
 	private final List<EquationState> iceStates;
+	private final boolean geotopInterface;
+	private final double[] saturatedConductivity;
 
 	/**
 	 * @param soil  grid, initial suction and temperature, ids and parameters
@@ -99,6 +120,8 @@ public final class SoilWaterDriver {
 		Objects.requireNonNull(soil, "soil");
 		this.properties = Objects.requireNonNull(water, "water");
 		this.cells = soil.cells();
+		this.geotopInterface = GEOTOP_INTERFACE.equalsIgnoreCase(water.interfaceHydraulicConductivityModel().trim());
+		this.saturatedConductivity = new double[cells];
 		this.geometry = new WGGeometry(soil.z().clone(), soil.spaceDeltaZ().clone(), soil.controlVolume().clone());
 		this.variables = new WGProblemQuantities(soil.waterSuction().clone(), soil.temperature().clone(),
 				soil.equationStateID().clone(), soil.parameterID().clone());
@@ -123,7 +146,8 @@ public final class SoilWaterDriver {
 	private ComputeQuantitiesRichards quantities(SoilWaterProperties water, RichardsBoundaryConditionType top,
 			SoilHeatSetup soil) {
 		return new ComputeQuantitiesRichards(water.typeClosureEquation(), water.typeEquationState(),
-				water.typeUHCModel(), water.typeUHCTemperatureModel(), water.interfaceHydraulicConductivityModel(), top,
+				water.typeUHCModel(), water.typeUHCTemperatureModel(),
+				geotopInterface ? "max" : water.interfaceHydraulicConductivityModel(), top,
 				water.bottomType(), variables, geometry, soil.parameters());
 	}
 
@@ -131,6 +155,51 @@ public final class SoilWaterDriver {
 		return new Richards1DKernel(IBoundaryCondition.createRichardsSimpleBoundaryCondition(top),
 				IBoundaryCondition.createRichardsSimpleBoundaryCondition(properties.bottomType()), cells, 1,
 				properties.newtonTolerance(), 0.0, properties.maxIterations(), states);
+	}
+
+	/**
+	 * Conductivity of each cell at saturation with its ice, ψ_sat(θ_i), with the
+	 * impedance of the ice, GEOtop's {@code kmax}; {@code variables.kappas} is
+	 * left to be recomputed.
+	 */
+	private void saturatedConductivities(ComputeQuantitiesRichards quantities, boolean frozen) {
+		double[] psi = variables.waterSuctions;
+		double[] held = Arrays.copyOf(psi, cells);
+		for (int i = 0; i < cells; i++) {
+			psi[i] = frozen ? retention.saturationSuction(ice[i], variables.parameterID[i]) : 0.0;
+		}
+		quantities.computeHydraulicConductivity(cells);
+		for (int i = 0; i < cells; i++) {
+			psi[i] = held[i];
+			double impedance = frozen
+					? retention.impedance(ice[i], properties.iceImpedance(), variables.parameterID[i])
+					: 1.0;
+			saturatedConductivity[i] = variables.kappas[i] * impedance * viscosity(variables.temperatures[i]);
+		}
+	}
+
+	/**
+	 * GEOtop's face conductivities: upwind cell at its suction, capped by the
+	 * smaller saturated conductivity of the two cells (class javadoc). The
+	 * bottom and top faces keep WHETGEO's.
+	 */
+	private void geotopFaces(boolean frozen) {
+		double[] z = geometry.z;
+		double[] psi = variables.waterSuctions;
+		for (int k = 1; k < cells; k++) {
+			int below = k - 1;
+			int above = k;
+			int upwind = psi[below] + z[below] > psi[above] + z[above] ? below : above;
+			double kUpwind = variables.kappas[upwind] * viscosity(variables.temperatures[upwind]);
+			variables.kappasInterface[k] = Math.min(kUpwind,
+					Math.min(saturatedConductivity[below], saturatedConductivity[above]));
+		}
+	}
+
+	/** GEOtop's correction of the conductivity for the viscosity of water, T [K]. */
+	static double viscosity(double temperature) {
+		double t = temperature - 273.15;
+		return t >= 0.0 ? 0.000158685828 * t * t + 0.025263459766 * t + 0.731495819 : 0.731495819;
 	}
 
 	/** Liquid retention with ice of this soil. */
@@ -298,6 +367,9 @@ public final class SoilWaterDriver {
 				applied[i] += variables.ETs[i] * WATER_DENSITY;
 			}
 			for (int picard = 0; picard < properties.picardIterations(); picard++) {
+				if (geotopInterface) {
+					saturatedConductivities(quantities, frozen);
+				}
 				if (frozen) {
 					// conductivity at min(ψ, ψ_sat(θ_i)), then the impedance of the ice
 					double[] psi = variables.waterSuctions;
@@ -315,6 +387,9 @@ public final class SoilWaterDriver {
 					quantities.computeHydraulicConductivity(cells);
 				}
 				quantities.computeInterfaceHydraulicConductivity(cells);
+				if (geotopInterface) {
+					geotopFaces(frozen);
+				}
 				variables.waterSuctions = kernel.solve(dt, variables.richardsBottomBCValue,
 						variables.richardsTopBCValue, cells, variables.kappasInterface, variables.volumes,
 						geometry.spaceDeltaZ, variables.ETs, variables.waterSuctions, variables.temperatures,

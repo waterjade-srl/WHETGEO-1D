@@ -61,6 +61,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.IncomingLongwave;
 import org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopSnowParameters;
 import org.geoframe.whetgeo1d.core.snowsoil.BareSoilEnergyBalance;
+import org.geoframe.whetgeo1d.core.snowsoil.SoilWaterDriver;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
@@ -465,8 +466,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	public String[] typeUHCModel = { "Mualem Van Genuchten" };
 	@In
 	public String typeUHCTemperatureModel = "notemperature";
+	@Description("Conductivity of the faces of Richards: WHETGEO's (max, min, arithmetic mean, ...) or GEOtop (upwind cell capped by the saturated conductivities with ice, viscosity correction); empty: GEOtop in fidelity, max in recommended.")
 	@In
-	public String interfaceHydraulicConductivityModel = "max";
+	public String interfaceHydraulicConductivityModel = "";
 	@In
 	public double waterNewtonTolerance = 1e-11;
 	@In
@@ -897,7 +899,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 		SoilWaterProperties water = null;
 		if (EnumUtils.fromString(SoilWaterMode.class, soilWaterMode) == SoilWaterMode.RICHARDS) {
 			water = new SoilWaterProperties(typeWaterClosureEquation, typeWaterEquationState, typeUHCModel,
-					typeUHCTemperatureModel, interfaceHydraulicConductivityModel,
+					typeUHCTemperatureModel,
+					interfaceHydraulicConductivityModel == null || interfaceHydraulicConductivityModel.isBlank()
+							? (fidelity ? SoilWaterDriver.GEOTOP_INTERFACE : "max")
+							: interfaceHydraulicConductivityModel,
 					RichardsBoundaryConditionType.fromString(soilWaterBottomType), waterNewtonTolerance,
 					waterMaxIterations, 1, waterMaxSubstep, iceImpedance);
 		}
@@ -965,6 +970,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("snowTop", snowTop.name());
 		attributes.put("bottomBC", bottomType.name());
 		attributes.put("soilWaterBottomBC", water == null ? "none" : water.bottomType().name());
+		if (water != null) {
+			attributes.put("interfaceHydraulicConductivity", water.interfaceHydraulicConductivityModel());
+		}
 		attributes.put("latitude", Double.toString(latitude));
 		attributes.put("longitude", Double.toString(longitude));
 		attributes.put("standardTime", Double.toString(standardTime));

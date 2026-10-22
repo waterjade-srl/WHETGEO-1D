@@ -76,7 +76,7 @@ Names are the component's fields: set them in `parameter{}` as `"snowsoil.<name>
 - Zero-thickness (pond) cells are not accepted.
 - Soil closures:
   - heat: `typeClosureEquation`, `typeEquationState` and `typeThermalConductivity`, by default the freezing soil (`Van Genuchten Dall Amico`, `FreezingSoilInternalEnergy`, `Cosenza`), and `interfaceThermalConductivityModel`;
-  - water: `typeWaterClosureEquation`, `typeWaterEquationState`, `typeUHCModel`, `typeUHCTemperatureModel` and `interfaceHydraulicConductivityModel`;
+  - water: `typeWaterClosureEquation`, `typeWaterEquationState`, `typeUHCModel`, `typeUHCTemperatureModel` and `interfaceHydraulicConductivityModel` (empty by default: `GEOtop` in fidelity, the upwind cell capped by the saturated conductivities with ice; `max` in recommended);
   - Richards settings: `waterNewtonTolerance`, `waterMaxIterations`, `waterMaxSubstep`;
   - `iceImpedance` (7, as GEOtop);
   - `thermalConductivityWater` (0.6; GEOtop uses 0.567).
