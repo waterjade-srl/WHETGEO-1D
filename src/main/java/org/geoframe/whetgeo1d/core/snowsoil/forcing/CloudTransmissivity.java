@@ -94,6 +94,19 @@ public record CloudTransmissivity(SolarGeometry site, ClearSkyTransmissivity cle
 	}
 
 	/**
+	 * Clear-sky transmissivity ⟨τ<sub>atm</sub>⟩ averaged over a step, with the
+	 * solar height floored at asin 0.05 ({@code Tauatm},
+	 * {@code radiation.cc:294-311}): GEOtop's argument of the diffuse fraction,
+	 * k<sub>d</sub> = k<sub>d</sub>(τ<sub>c</sub> τ<sub>atm</sub>).
+	 */
+	public double atmosphericTransmissivity(double julianDayBegin, double julianDayEnd, double julianDay,
+			double pressure, double relativeHumidity, double airTemperature) {
+		SolarGeometry.Sun sun = SolarGeometry.sun(julianDay);
+		return average(jd -> clearSky.transmissivity(Math.max(site.height(jd, sun), Math.asin(0.05)), pressure,
+				relativeHumidity, airTemperature), julianDayBegin, julianDayEnd);
+	}
+
+	/**
 	 * τ<sub>c</sub> from global shortwave.
 	 *
 	 * @param shortwave measured global shortwave on the horizontal [W m-2]
@@ -108,8 +121,8 @@ public record CloudTransmissivity(SolarGeometry site, ClearSkyTransmissivity cle
 			return Double.NaN;
 		}
 		double clear = SolarGeometry.SOLAR_CONSTANT * sun.distanceFactor() * tauSin;
-		double tauAtm = average(jd -> clearSky.transmissivity(Math.max(site.height(jd, sun), Math.asin(0.05)),
-				pressure, relativeHumidity, airTemperature), julianDayBegin, julianDayEnd);
+		double tauAtm = atmosphericTransmissivity(julianDayBegin, julianDayEnd, julianDay, pressure, relativeHumidity,
+				airTemperature);
 		double kd = 0.2;
 		double tau;
 		int j = 0;
