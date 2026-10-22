@@ -1043,12 +1043,33 @@ public class SnowSoilSolver1DMain extends HMModel {
 		return files;
 	}
 
-	private String version() {
+	/**
+	 * Code version of the run header (VAL-7): {@link #codeVersion} if given;
+	 * otherwise "whetgeo1d " and the {@code git describe --always --dirty --tags}
+	 * captured at build time in {@code whetgeo1d-git-version.txt} (profile
+	 * {@code git-version} of the pom, active in a git checkout); otherwise the
+	 * version in the jar's manifest; otherwise "whetgeo1d (version unknown)".
+	 */
+	static String version(String codeVersion) {
 		if (codeVersion != null && !codeVersion.isBlank()) {
 			return codeVersion;
 		}
+		try (InputStream in = SnowSoilSolver1DMain.class.getResourceAsStream("/whetgeo1d-git-version.txt")) {
+			if (in != null) {
+				String git = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+				if (!git.isEmpty() && !git.contains(" ")) {
+					return "whetgeo1d " + git;
+				}
+			}
+		} catch (IOException e) {
+			// fall back to the manifest
+		}
 		String v = SnowSoilSolver1DMain.class.getPackage().getImplementationVersion();
-		return v == null ? "whetgeo1d (version unknown)" : v;
+		return v == null ? "whetgeo1d (version unknown)" : "whetgeo1d " + v;
+	}
+
+	private String version() {
+		return version(codeVersion);
 	}
 
 	/** SHA-256 of bytes, hexadecimal. */

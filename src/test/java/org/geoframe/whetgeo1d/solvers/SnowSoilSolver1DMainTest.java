@@ -258,6 +258,17 @@ public class SnowSoilSolver1DMainTest {
 		assertArrayEquals(continuous.outSoilTemperature, resumed.outSoilTemperature, 0.0);
 	}
 
+	/** The code version of the run header: given, or captured at build time. */
+	@Test
+	public void codeVersionOfTheRunHeader() {
+		assertEquals("v1", SnowSoilSolver1DMain.version("v1"));
+		String built = SnowSoilSolver1DMain.version("");
+		assertTrue(built, built.startsWith("whetgeo1d "));
+		if (getClass().getResource("/whetgeo1d-git-version.txt") != null) {
+			assertTrue(built, !built.contains("unknown"));
+		}
+	}
+
 	@Test
 	public void fidelityHeatOnlyKeepsTheSuction() throws Exception {
 		RecordingWriter w = new RecordingWriter();
