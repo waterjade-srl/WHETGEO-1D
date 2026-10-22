@@ -32,7 +32,7 @@ Then open `Jupyter_Notebook/7_Canada_NTGS_Fidelity.ipynb`.
 For sensitivity runs, `-D` overrides of the .sim go through `SIM_OPTS`, and the output goes to `output/<case>_<LABEL>/`:
 
 ```bash
-LABEL=stop SIM_OPTS="-DonNonConvergence=Stop" cases/snowsoil/canada_ntgs/run.sh NTGS1_JR3QG
+LABEL=flag SIM_OPTS="-DonNonConvergence=Flag" cases/snowsoil/canada_ntgs/run.sh NTGS1_JR3QG
 ```
 
 The other overrides are `-DheatTolerance=` and `-DendDate=`.
@@ -92,7 +92,9 @@ The forcing is GEOtop's own, computed by the temporary fidelity tools (`GeotopFo
 
 ### Step control
 
-`onNonConvergence = Flag` in this case (the component's default is `Stop`). In NTGS1 JRA-3Q one hour of 5 October 2021 misses the per-cell bound of 1e-3 J m⁻² by residuals of 0.006–0.03 J m⁻², even at 225 s. The cause is a saturated peat cell at 0 °C, at 0.26–0.42 m. Its two sub-steps are accepted, marked degraded and logged. The other three cases have no rejection.
+The component's default, `onNonConvergence = Stop`. No step is rejected in the four cases.
+
+One hour needed attention: in NTGS1 JRA-3Q, 5 October 2021 12:00 UTC, a saturated peat cell at 0.26–0.42 m forms its first ice exactly at its melting temperature (T − T* ≈ −3·10⁻⁸ K). The forcing is ordinary (night, −2.8 °C, wind below 3 m s⁻¹, no precipitation). At that point the liquid content falls as |T − T*|^1.8 (Van Genuchten n = 1.8, α = 30 m⁻¹), its second derivative is unbounded, and Newton converges only linearly: the per-cell residual goes from 743 to 9.4 to 0.005 times its bound (1e-3 J m⁻²) in successive polish rounds of the heat driver, at any step length, so halving the step did not help. With a single polish round the step was rejected 6 times; the heat driver now repeats the polish rounds until every cell is within its bound (at most 10). Over the three years only this step needs a second round, and the run time is unchanged.
 
 ## Results
 

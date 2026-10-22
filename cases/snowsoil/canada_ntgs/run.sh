@@ -4,7 +4,7 @@
 #   ./run.sh                      forcing (data/<case>/) and run (output/<case>/) of the four cases
 #   ./run.sh NTGS1_ERA5 ...       only these cases
 #   FORCING_ONLY=1 ./run.sh       only the forcing
-#   LABEL=flag SIM_OPTS="-DonNonConvergence=Flag" ./run.sh NTGS1_JR3QG   a sensitivity run, output/<case>_flag/
+#   LABEL=flag SIM_OPTS="-DonNonConvergence=Flag" ./run.sh NTGS1_JR3QG   a sensitivity run, output/<case>_flag/ (default: Stop)
 # Prints the wall time of each run and the step rejections the controller logged (SOL-5).
 set -euo pipefail
 export LC_NUMERIC=C

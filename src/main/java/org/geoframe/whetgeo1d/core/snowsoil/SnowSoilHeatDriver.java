@@ -72,9 +72,15 @@ import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
  * cells ({@link #toleranceFor}), always reachable; (2) checks every cell after
  * the solve with the per-cell criterion of the specification; (3) if a cell
  * fails, typically a cold cell left with a residual that the floor of a wet
- * cell let through, adds {@value #POLISH_ITERATIONS} × {@value #POLISH_ITERATIONS}
- * nested Newton iterations with zero tolerance, warm-started from the solution
- * ({@link InstrumentedEquationState}), and checks again. The outcome is in
+ * cell let through, adds rounds of {@value #POLISH_ITERATIONS} ×
+ * {@value #POLISH_ITERATIONS} nested Newton iterations with zero tolerance,
+ * warm-started from the solution ({@link InstrumentedEquationState}), checking
+ * again after each, up to {@value #MAX_POLISH_ROUNDS} rounds. One round is
+ * almost always enough; the first ice of a saturated soil cell exactly at its
+ * melting temperature needs more: there the liquid content falls as
+ * |T - T*|^n of Van Genuchten, its second derivative is unbounded, and Newton
+ * converges linearly (NTGS1 JRA-3Q, 5 October 2021: 743 → 9.4 → 0.005 times
+ * the bound in the first rounds, at any step length). The outcome is in
  * {@link NewtonReport}.</li>
  * </ul>
  *
@@ -88,6 +94,7 @@ public final class SnowSoilHeatDriver {
 	private static final double EPSILON = Math.ulp(1.0);
 	private static final double UNDEFINED = -9999.0;
 	private static final int POLISH_ITERATIONS = 2;
+	private static final int MAX_POLISH_ROUNDS = 10;
 
 	private final SnowSoilColumn column;
 	private final Parameters soilParameters;
@@ -440,7 +447,7 @@ public final class SnowSoilHeatDriver {
 		Evaluation evaluation = evaluate(nSoil, n, oldEnergy, top, topStartTemperature, bottomValue, timeDelta);
 
 		boolean polished = false;
-		if (!evaluation.converged() && n > 1) {
+		for (int round = 0; round < MAX_POLISH_ROUNDS && !evaluation.converged() && n > 1; round++) {
 			solveSystem(n, topCondition, topValue, bottomValue, timeDelta, 0.0, POLISH_ITERATIONS, true);
 			outer += instrumentation.outer();
 			inner += instrumentation.inner();

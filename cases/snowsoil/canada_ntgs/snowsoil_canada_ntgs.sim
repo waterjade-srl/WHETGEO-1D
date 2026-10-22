@@ -35,10 +35,8 @@ def timestep  = 60
 def data = "$oms_prj/data/${caseName}"
 // optional overrides for sensitivity runs (not the reference): -DheatTolerance=..., -DonNonConvergence=Flag, -Dlabel=... (output/<case>_<label>/)
 def heatTolerance = (System.getProperty("heatTolerance") ?: "1e-3") as double
-// Flag, not the component's Stop: in NTGS1 JRA-3Q one hour of October 2021 (a saturated peat cell at 0 degC,
-// 0.26-0.42 m) misses the per-cell bound of 1e-3 J m-2 by residuals of 0.006-0.03 J m-2 even at 225 s; the step
-// is accepted, marked degraded and logged (README.md). -DonNonConvergence=Stop restores the default.
-def onNonConvergence = System.getProperty("onNonConvergence") ?: "Flag"
+// the component's default: a step that does not converge stops the run, saving the last accepted state
+def onNonConvergence = System.getProperty("onNonConvergence") ?: "Stop"
 def label = System.getProperty("label") ? "_" + System.getProperty("label") : ""
 
 new OMS3().sim(name: "snowsoil_canada_ntgs") {
