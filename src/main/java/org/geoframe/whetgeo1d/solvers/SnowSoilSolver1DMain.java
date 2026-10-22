@@ -45,6 +45,8 @@ import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
 import org.geoframe.whetgeo1d.core.snowsoil.RunDiagnostics;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowProcesses;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilRestart;
+import org.geoframe.whetgeo1d.core.snowsoil.StepNotConvergedException;
+import org.geoframe.whetgeo1d.core.snowsoil.StepRejection;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilStepResult;
 import org.geoframe.whetgeo1d.core.snowsoil.SoilHeatSetup;
@@ -223,6 +225,16 @@ public class SnowSoilSolver1DMain extends HMModel {
 		NEUMANN,
 		/** h (T_a - T_top), linearised with derivative -h. */
 		BULK_TRANSFER
+	}
+
+	/** Heat condition at the top of the snow (COL-6). */
+	public enum SnowTop {
+		/** The surface energy balance of the snow library, the normal case. */
+		SURFACE_ENERGY_BALANCE,
+		/** Imposed snow-surface temperature [°C], capped at 0 °C. */
+		DIRICHLET,
+		/** Imposed flux into the snow [W m-2]. */
+		NEUMANN
 	}
 
 	/** How total precipitation is split. */
@@ -466,6 +478,15 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public Map<Integer, double[]> inTopBC;
 
+	@Description("Heat at the top of the snow: Surface Energy Balance (default), Dirichlet or Neumann.")
+	@In
+	public String snowTopType = "Surface Energy Balance";
+	@Description("Constant value of the snow top: temperature [°C, capped at 0] or flux into the snow [W m-2].")
+	@In
+	public double snowTopValue = Double.NaN;
+	@In
+	public Map<Integer, double[]> inSnowTopBC;
+
 	@Description("Heat at the bottom: Bottom Dirichlet, Bottom Neumann, Bottom No Gradient.")
 	@In
 	public String bottomBCType = "Bottom No Gradient";
@@ -573,6 +594,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	@Unit("s")
 	public double restartInterval = 0.0;
+	@Description("Extra acceptance criteria of the steps, e.g. of a validation run or a fault injected by a test.")
+	@In
+	public List<StepController.Check> stepChecks;
 	@Description("Restart state to carry on from; empty: start from the initial conditions.")
 	@In
 	public String resumeFrom = "";
@@ -636,6 +660,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private IncomingLongwave.ClearSkyEmissivity emissivity;
 	private PrecipitationPartition partition;
 	private BareSoilTop bareSoilTop;
+	private SnowTop snowTop;
 	private DiffusionBoundaryConditionType bottomType;
 	private double[] soilDepth;
 	private double[] soilThickness;
@@ -647,8 +672,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 			setup();
 		}
 		long end = epochSeconds(inCurrentDate);
+		double[] forcingStateBefore = cloudiness.state();
 		StepForcing forcing = forcing(end);
-		SnowSoilStepResult result = advance(forcing);
+		SnowSoilStepResult result;
+		try {
+			result = advance(forcing);
+		} catch (StepNotConvergedException e) {
+			throw stopOnFailure(e, forcingStateBefore);
+		}
 		publish(result);
 		outRunDiagnostics = controller.diagnostics();
 		for (SnowSoilOutputWriter writer : activeWriters) {
@@ -699,6 +730,56 @@ public class SnowSoilSolver1DMain extends HMModel {
 			System.out.println("snowsoil: " + rejection.describe());
 		}
 		return step.result();
+	}
+
+	/**
+	 * Stop on a step that does not converge (SOL-5, policy {@code Stop}): the
+	 * controller has left the solver at the start of the failed interval, the
+	 * last accepted state. That state goes to {@link #restartPath} (or to
+	 * {@link #outputPath} without one) as the usual pair
+	 * {@code snowsoil_restart_<t>.bin} + {@code .forcing}, with the forcing
+	 * state as it was before the failed step, and the rejections of the run to
+	 * {@code snowsoil_rejections_<t>.txt}; the writers are closed, so that the
+	 * outputs up to the last accepted step are complete; the failure is
+	 * rethrown saying where the state is. A run resumed from it with
+	 * {@link #resumeFrom} goes on as the continuous run would have.
+	 *
+	 * @param forcingState state of the forcing estimates before the failed step
+	 */
+	private StepNotConvergedException stopOnFailure(StepNotConvergedException e, double[] forcingState) {
+		// the controller has already logged the rejections of the failed interval
+		StringBuilder log = new StringBuilder();
+		for (StepRejection r : controller.rejectionLog()) {
+			log.append(r.describe()).append('\n');
+		}
+		String where = "not saved (no restartPath or outputPath)";
+		String folderName = restartPath != null && !restartPath.isBlank() ? restartPath
+				: outputPath != null && !outputPath.isBlank() ? outputPath : null;
+		if (folderName != null) {
+			try {
+				Path folder = Files.createDirectories(Path.of(folderName));
+				SnowSoilRestart state = controller.checkpoint();
+				long t = (long) state.time();
+				Path file = folder.resolve(String.format("snowsoil_restart_%d.bin", t));
+				try (OutputStream out = Files.newOutputStream(file)) {
+					state.write(out);
+				}
+				writeForcingState(forcingStateFile(file), forcingState);
+				Files.writeString(folder.resolve(String.format("snowsoil_rejections_%d.txt", t)), log.toString());
+				where = "saved in " + file + " (resume with resumeFrom)";
+			} catch (IOException | RuntimeException io) {
+				e.addSuppressed(io);
+				where = "could not be saved: " + io.getMessage();
+			}
+		}
+		System.err.println("SnowSoilSolver1DMain: rejected steps of the run:\n" + log);
+		try {
+			close();
+		} catch (IOException io) {
+			e.addSuppressed(io);
+		}
+		return new StepNotConvergedException(e.getMessage() + ". The run stopped at " + inCurrentDate
+				+ "; the state of the last accepted step (" + (long) controller.time() + " s) " + where, e);
 	}
 
 	/**
@@ -788,6 +869,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 				: new PrecipitationPartition.GeotopLinear(rainThreshold + MELTING_TEMPERATURE,
 						snowThreshold + MELTING_TEMPERATURE);
 		bareSoilTop = EnumUtils.fromString(BareSoilTop.class, bareSoilTopType);
+		snowTop = EnumUtils.fromString(SnowTop.class, snowTopType);
 
 		Map<String, String> attributes = new LinkedHashMap<>();
 		attributes.put("snowThermalConductivity", conductivity.name());
@@ -798,6 +880,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("temperatureHeight", Double.toString(temperatureHeight));
 		attributes.put("soilWaterMode", EnumUtils.fromString(SoilWaterMode.class, soilWaterMode).name());
 		attributes.put("bareSoilTop", bareSoilTop.name());
+		attributes.put("snowTop", snowTop.name());
 		attributes.put("bottomBC", bottomType.name());
 		attributes.put("soilWaterBottomBC", water == null ? "none" : water.bottomType().name());
 		attributes.put("latitude", Double.toString(latitude));
@@ -848,6 +931,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		} else {
 			controller = new StepController(solver, settings, epochSeconds(inCurrentDate) - tTimeStep, label);
 		}
+		if (stepChecks != null) {
+			stepChecks.forEach(controller::addCheck);
+		}
 		if (restartPath != null && !restartPath.isBlank() && restartInterval > 0.0) {
 			Path folder = Files.createDirectories(Path.of(restartPath));
 			controller.onRestart(state -> {
@@ -878,7 +964,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private static final int FORCING_STATE_MAGIC = 0x534E4643; // "SNFC"
 
 	private void writeForcingState(Path file) throws IOException {
-		double[] state = cloudiness.state();
+		writeForcingState(file, cloudiness.state());
+	}
+
+	private static void writeForcingState(Path file, double[] state) throws IOException {
 		try (var out = new java.io.DataOutputStream(new java.io.BufferedOutputStream(Files.newOutputStream(file)))) {
 			out.writeInt(FORCING_STATE_MAGIC);
 			out.writeInt(1);
@@ -973,12 +1062,33 @@ public class SnowSoilSolver1DMain extends HMModel {
 		return files;
 	}
 
-	private String version() {
+	/**
+	 * Code version of the run header (VAL-7): {@link #codeVersion} if given;
+	 * otherwise "whetgeo1d " and the {@code git describe --always --dirty --tags}
+	 * captured at build time in {@code whetgeo1d-git-version.txt} (profile
+	 * {@code git-version} of the pom, active in a git checkout); otherwise the
+	 * version in the jar's manifest; otherwise "whetgeo1d (version unknown)".
+	 */
+	static String version(String codeVersion) {
 		if (codeVersion != null && !codeVersion.isBlank()) {
 			return codeVersion;
 		}
+		try (InputStream in = SnowSoilSolver1DMain.class.getResourceAsStream("/whetgeo1d-git-version.txt")) {
+			if (in != null) {
+				String git = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+				if (!git.isEmpty() && !git.contains(" ")) {
+					return "whetgeo1d " + git;
+				}
+			}
+		} catch (IOException e) {
+			// fall back to the manifest
+		}
 		String v = SnowSoilSolver1DMain.class.getPackage().getImplementationVersion();
-		return v == null ? "whetgeo1d (version unknown)" : v;
+		return v == null ? "whetgeo1d (version unknown)" : "whetgeo1d " + v;
+	}
+
+	private String version() {
+		return version(codeVersion);
 	}
 
 	/** SHA-256 of bytes, hexadecimal. */
@@ -1115,8 +1225,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 		default -> 0.0;
 		};
 		double waterBottom = series(inSoilWaterBottomBC, soilWaterBottomValue, "soil water bottom");
+		TopBoundary overSnow = switch (snowTop) {
+		case SURFACE_ENERGY_BALANCE -> null;
+		case DIRICHLET -> new TopBoundary.SurfaceTemperature(
+				series(inSnowTopBC, snowTopValue, "snow top") + MELTING_TEMPERATURE);
+		case NEUMANN -> TopBoundary.SurfaceFlux.constant(series(inSnowTopBC, snowTopValue, "snow top"));
+		};
 		return new StepForcing(surface, snow, rain, groundAlbedo, groundAlbedo, top, bottom, dt, null,
-				precipitationTemperature, waterBottom);
+				precipitationTemperature, waterBottom, overSnow);
 	}
 
 	private void publish(SnowSoilStepResult r) {

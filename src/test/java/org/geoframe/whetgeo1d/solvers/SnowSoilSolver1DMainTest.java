@@ -21,6 +21,7 @@ package org.geoframe.whetgeo1d.solvers;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -37,6 +38,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
 import org.geoframe.whetgeo1d.io.snowsoil.RecordingWriter;
 import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilOutputWriter;
 import org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader;
+import org.geoframe.whetgeo1d.core.snowsoil.StepNotConvergedException;
 import org.junit.Test;
 
 /**
@@ -199,6 +201,72 @@ public class SnowSoilSolver1DMainTest {
 		assertEquals(continuous.outSurfaceTemperature, resumed.outSurfaceTemperature, 0.0);
 		assertArrayEquals(continuous.outSoilTemperature, resumed.outSoilTemperature, 0.0);
 		assertArrayEquals(continuous.outSoilSuction, resumed.outSoilSuction, 0.0);
+	}
+
+	/**
+	 * Stop on a step that does not converge (SOL-5, policy Stop): a check that
+	 * rejects every step from a given time makes the run fail there; the
+	 * outputs up to the last accepted step are those of the continuous run, the
+	 * writers are closed, the state of the last accepted step is saved, and a
+	 * run resumed from it ends bit for bit as the continuous run.
+	 */
+	@Test
+	public void stopOnNonConvergenceSavesTheLastAcceptedState() throws Exception {
+		String end = "2025-12-10 00:00";
+		RecordingWriter all = new RecordingWriter();
+		SnowSoilSolver1DMain continuous = caseComponent("recommended", "Richards", all);
+		runCase(continuous, end);
+
+		long failAt = LocalDateTime.of(2025, 12, 3, 12, 0).toEpochSecond(ZoneOffset.UTC);
+		Path folder = Files.createTempDirectory("snowsoil-stop");
+		RecordingWriter partial = new RecordingWriter();
+		SnowSoilSolver1DMain failing = caseComponent("recommended", "Richards", partial);
+		failing.outputPath = folder.toString();
+		failing.maxHalvings = 1;
+		failing.stepChecks = List.of((time, forcing, result, terms) -> time >= failAt ? "injected failure" : null);
+		try {
+			runCase(failing, end);
+			fail("the run should stop");
+		} catch (StepNotConvergedException e) {
+			assertTrue(e.getMessage(), e.getMessage().contains("saved in"));
+			assertTrue(e.getMessage(), e.getMessage().contains("injected failure"));
+			assertEquals(2, e.rejections().size());
+		}
+		assertTrue("writers closed", partial.closed);
+		assertTrue(partial.steps.size() > 100);
+		assertEquals(failAt, partial.steps.get(partial.steps.size() - 1).epochSeconds());
+		for (int k = 0; k < partial.steps.size(); k++) {
+			assertEquals("step " + k, all.steps.get(k), partial.steps.get(k));
+		}
+		Path state = folder.resolve("snowsoil_restart_" + failAt + ".bin");
+		assertTrue(Files.isRegularFile(state));
+		assertTrue(Files.isRegularFile(folder.resolve("snowsoil_restart_" + failAt + ".forcing")));
+		assertTrue(Files.readString(folder.resolve("snowsoil_rejections_" + failAt + ".txt"))
+				.contains("injected failure"));
+
+		String start = LocalDateTime.ofEpochSecond(failAt + 3600, 0, ZoneOffset.UTC)
+				.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+		RecordingWriter rest = new RecordingWriter();
+		SnowSoilSolver1DMain resumed = caseComponent("recommended", "Richards", rest);
+		resumed.resumeFrom = state.toString();
+		runCase(resumed, start, end);
+		int offset = partial.steps.size();
+		assertEquals(all.steps.size(), offset + rest.steps.size());
+		for (int k = 0; k < rest.steps.size(); k++) {
+			assertEquals("resumed step " + k, all.steps.get(offset + k), rest.steps.get(k));
+		}
+		assertArrayEquals(continuous.outSoilTemperature, resumed.outSoilTemperature, 0.0);
+	}
+
+	/** The code version of the run header: given, or captured at build time. */
+	@Test
+	public void codeVersionOfTheRunHeader() {
+		assertEquals("v1", SnowSoilSolver1DMain.version("v1"));
+		String built = SnowSoilSolver1DMain.version("");
+		assertTrue(built, built.startsWith("whetgeo1d "));
+		if (getClass().getResource("/whetgeo1d-git-version.txt") != null) {
+			assertTrue(built, !built.contains("unknown"));
+		}
 	}
 
 	@Test
