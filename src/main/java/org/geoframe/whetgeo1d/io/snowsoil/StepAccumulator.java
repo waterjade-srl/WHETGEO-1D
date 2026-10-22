@@ -72,8 +72,9 @@ final class StepAccumulator {
 			new Scalar("snowLiquidMass", "kg m-2", Kind.STATE, "liquid water held by the pack"),
 			new Scalar("snowCells", "1", Kind.STATE, "number of snow cells"),
 			new Scalar("surfaceAge", "1", Kind.STATE, "non-dimensional age of the snow surface"),
-			new Scalar("surfaceTemperature", "K", Kind.STATE,
-					"temperature of the top snow cell after the heat step; without snow, of the top soil cell"),
+			new Scalar("surfaceTemperature", "K", Kind.MEAN,
+					"temperature of the surface, mean over the record as GEOtop's Tsurface: of the top snow cell after"
+							+ " the heat step; without snow, of the bare-soil skin or of the top soil cell"),
 			new Scalar("pendingSurfaceEnergy", "J m-2", Kind.STATE, "energy carried to the next step as surface input"),
 			new Scalar("soilWaterStorage", "kg m-2", Kind.STATE, "water stored in the soil, liquid and ice"),
 			// surface fluxes
@@ -148,6 +149,7 @@ final class StepAccumulator {
 	private double[] soilSuction;
 	private double[] soilTheta;
 	private double[] faceWater;
+	private double[] soilTemperatureSum;
 
 	StepAccumulator(OutputOptions options) {
 		this.options = options;
@@ -161,6 +163,7 @@ final class StepAccumulator {
 		}
 		steps = 0;
 		faceWater = null;
+		soilTemperatureSum = null;
 	}
 
 	private void put(String name, double value) {
@@ -190,6 +193,12 @@ final class StepAccumulator {
 		steps++;
 		snow = r.snow();
 		soilTemperature = solver.soilTemperatures();
+		if (soilTemperatureSum == null) {
+			soilTemperatureSum = new double[soilTemperature.length];
+		}
+		for (int i = 0; i < soilTemperature.length; i++) {
+			soilTemperatureSum[i] += soilTemperature[i];
+		}
 		soilIce = solver.soilIce();
 		soilSuction = solver.soilSuctions();
 		soilTheta = options.soilWaterContent() == null ? null : options.soilWaterContent().liquid(solver);
@@ -290,7 +299,14 @@ final class StepAccumulator {
 			};
 			values.put(s.name(), v);
 		}
-		Record rec = new Record(values, snow, soilTemperature, soilIce, soilSuction, soilTheta, faceWater);
+		double[] meanTemperature = soilTemperatureSum == null ? null : soilTemperatureSum.clone();
+		if (meanTemperature != null) {
+			for (int i = 0; i < meanTemperature.length; i++) {
+				meanTemperature[i] /= steps;
+			}
+		}
+		Record rec = new Record(values, snow, soilTemperature, soilIce, soilSuction, soilTheta, faceWater,
+				meanTemperature);
 		reset();
 		return rec;
 	}
@@ -307,9 +323,12 @@ final class StepAccumulator {
 	 * @param faceWater       water through the soil faces summed over the
 	 *                        steps [kg m-2], positive upward, face 0 at the
 	 *                        bottom; null without soil water
+	 * @param soilTemperatureMean soil temperature averaged over the steps of
+	 *                        the record [K], bottom first, as GEOtop's
+	 *                        {@code SoilAveragedTempProfileFile}
 	 */
 	record Record(Map<String, Double> scalars, List<SnowCell> snow, double[] soilTemperature, double[] soilIce,
-			double[] soilSuction, double[] soilTheta, double[] faceWater) {
+			double[] soilSuction, double[] soilTheta, double[] faceWater, double[] soilTemperatureMean) {
 
 		double get(String name) {
 			return scalars.get(name);

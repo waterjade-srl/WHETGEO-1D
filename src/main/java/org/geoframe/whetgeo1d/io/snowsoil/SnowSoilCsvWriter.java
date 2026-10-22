@@ -50,7 +50,9 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceFluxes;
  * <li>{@code point.csv}: the GEOtop columns this column has a counterpart for,
  * with GEOtop's names and units (mm, °C, W/m2), then the other quantities of
  * the step with names in GEOtop's style ({@code name[units]});</li>
- * <li>{@code soilTz.csv}, {@code psiz.csv}, {@code thetaliq.csv},
+ * <li>{@code soilTz.csv} (end of the record) and {@code soilTzav.csv}
+ * (mean over the record, as GEOtop's {@code SoilAveragedTempProfileFile}),
+ * {@code psiz.csv}, {@code thetaliq.csv},
  * {@code thetaice.csv}: soil profiles as GEOtop's
  * {@code SoilAveragedTempProfileFile}, {@code SoilLiqWaterPressProfileFile},
  * {@code SoilLiqContentProfileFile}, {@code SoilIceContentProfileFile}: one
@@ -180,8 +182,12 @@ public final class SnowSoilCsvWriter implements SnowSoilOutputWriter {
 			for (int i = soilCells - 1; i >= 0; i--) {
 				depths.add(String.format(Locale.ROOT, "%f", 1e3 * header.soilDepth()[i]));
 			}
-			open("soilTz.csv", preamble.toString() + "# soil temperature [C]; columns: depth of the cell centres [mm]\n",
+			open("soilTz.csv", preamble.toString()
+					+ "# soil temperature [C] at the end of the record; columns: depth of the cell centres [mm]\n",
 					depths);
+			open("soilTzav.csv", preamble.toString()
+					+ "# soil temperature [C] averaged over the record, as GEOtop's SoilAveragedTempProfileFile;"
+					+ " columns: depth of the cell centres [mm]\n", depths);
 			open("psiz.csv", preamble.toString()
 					+ "# soil water suction [mm], psi_w0 in a freezing soil; columns: depth of the cell centres [mm]\n",
 					depths);
@@ -237,6 +243,7 @@ public final class SnowSoilCsvWriter implements SnowSoilOutputWriter {
 
 		if (soilCells > 0) {
 			profile("soilTz.csv", date, r.soilTemperature(), -MELTING_TEMPERATURE, 1.0);
+			profile("soilTzav.csv", date, r.soilTemperatureMean(), -MELTING_TEMPERATURE, 1.0);
 			profile("psiz.csv", date, r.soilSuction(), 0.0, 1e3);
 			if (r.soilTheta() != null) {
 				profile("thetaliq.csv", date, r.soilTheta(), 0.0, 1.0);

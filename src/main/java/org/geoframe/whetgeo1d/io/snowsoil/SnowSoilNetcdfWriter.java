@@ -143,6 +143,7 @@ public final class SnowSoilNetcdfWriter implements SnowSoilOutputWriter {
 			variable(b, "dualDepth", List.of(dual), "m", "eta of the soil cell faces", null);
 			variable(b, "soilThickness", List.of(depth), "m", "thickness of the soil cells", null);
 			variable(b, "T", List.of(time, depth), "K", "soil temperature", "time: point");
+			variable(b, "Tmean", List.of(time, depth), "K", "soil temperature averaged over the record", "time: mean");
 			variable(b, "thetaIce", List.of(time, depth), "1", "soil ice content, volume of water equivalent",
 					"time: point");
 			variable(b, "psi", List.of(time, depth), "m",
@@ -220,6 +221,7 @@ public final class SnowSoilNetcdfWriter implements SnowSoilOutputWriter {
 			}
 			if (soilCells > 0) {
 				writer.write("T", origin, row(r.soilTemperature()));
+				writer.write("Tmean", origin, row(r.soilTemperatureMean()));
 				writer.write("thetaIce", origin, row(r.soilIce()));
 				writer.write("psi", origin, row(r.soilSuction()));
 				if (options.soilWaterContent() != null) {

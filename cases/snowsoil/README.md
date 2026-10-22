@@ -160,7 +160,7 @@ With `outputPath` set, the component writes to that folder:
   - the point quantities written to `point.csv`.
 - GEOtop-like CSV files:
   - `point.csv`, with the same quantities as GEOtop's `point` output;
-  - soil profiles: `soilTz.csv`, `psiz.csv`, `thetaliq.csv`, `thetaice.csv`;
+  - soil profiles: `soilTz.csv` (temperature at the end of the record), `soilTzav.csv` (mean over the record, as GEOtop's `SoilAveragedTempProfileFile`), `psiz.csv`, `thetaliq.csv`, `thetaice.csv`;
   - snow layers: `snowT.csv`, `snowDepth.csv`, `snowLiq.csv`, `snowIce.csv`.
 
 `outputInterval` [s] aggregates the records as GEOtop's `DtPlotPoint` does; 0 writes every step.

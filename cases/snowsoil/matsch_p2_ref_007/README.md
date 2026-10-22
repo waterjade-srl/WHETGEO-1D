@@ -88,36 +88,32 @@ The soil and its conditions:
 
 ## Result
 
-The run takes 3068 steps, every heat solve converges, and it runs in about 8 s. The full comparison against the VAL-1 tolerances, approved on 22 October 2026, is in the notebook. In short:
+Both runs take 3068 steps, every heat solve converges, and each runs in about 10 s. The full comparison against the VAL-1 tolerances, approved on 22 October 2026, is in the notebook.
 
-- **Within the tolerances:**
-  - SWE: RMSE 0.02 mm, peak −8 %;
-  - HS: RMSE 1.7 mm;
-  - LWnet with snow;
-  - soil temperature below 10 cm: bias ≤ 0.04 K, RMSE ≤ 0.09 K;
-  - θw below 15 mm;
-  - maximum frost depth: same cell, 15 mm.
-- **Beyond the tolerances:**
-  - HS max, by 20 mm: GEOtop keeps the thickness of a melting single layer;
-  - melt −11 % and runoff −21 %;
-  - Ts, SWnet, H and LE with snow: thin snow is not ported;
-  - soil RMSE 0.25–0.40 K at 15–85 mm: the conditioned bare-soil top;
-  - θ at the top cell.
+GEOtop's `soilTz` here is its `SoilAveragedTempProfileFile`, the soil temperature averaged over the hour, and its point `Tsurface` is an hourly mean too. The column's `soilTzav.csv` and `Tsurface` are the matching means, so the comparison uses them. An earlier comparison used end-of-hour temperatures and showed a "faster thaw" of the top cells; that was this mismatch, not physics.
 
-  The notebook explains each one. Nothing was tuned.
+**Within the tolerances (both runs):**
 
-### With the bare-soil energy balance
+- SWE: RMSE 0.02 mm, peak −8 % (−9 % with the balance);
+- HS: RMSE 1.7 mm;
+- LWnet with snow;
+- soil temperature at every depth:
+  - imposed `Tsurface`: RMSE ≤ 0.09 K;
+  - bare-soil energy balance: RMSE ≤ 0.14 K;
+  - |bias| ≤ 0.04 K in both;
+- maximum frost depth: same cell, 15 mm.
 
-In the second run the column computes its own surface balance without snow, instead of taking GEOtop's `Tsurface`. The evaporation is still GEOtop's `Evap_surface`, as a conditioned input (LINK-2).
+**Beyond the tolerances (both runs):**
 
-- **Bare-soil fluxes against GEOtop (742 hours):**
-  - Ts: RMSE 0.72 K, bias −0.04 K;
-  - SWnet, LWnet, H, LE: RMSE 1.1, 0.5, 0.7 and 0.5 W m⁻²;
-  - heat flux into the soil: RMSE 5.4 W m⁻².
-- **Against the tolerances, same verdicts as the first run, except:**
-  - soil T at 5 mm leaves the tolerance (RMSE 0.18 → 0.70 K);
-  - θw at 15 mm leaves it (0.006 → 0.010);
-  - θw at 5 mm improves (0.030 → 0.012) but stays outside;
-  - H and LE with snow improve (7.0 → 6.1 and 11.1 → 9.5 W m⁻²) but stay outside.
+- HS max, by 20 mm: GEOtop keeps the thickness of a melting single layer;
+- melt −10/−11 % and runoff −21 %;
+- Ts, SWnet, H and LE with snow: thin snow is not ported;
+- θw and θi of the top cell. On frosty nights the port pulls more water up into the top cell than GEOtop (+2.1 against +1.4 mm in the top three cells, night of 14–15 October). The top cell saturates (θi 0.43 against 0.38), while the liquid content at a given temperature is the same. The cause lies in the frozen-soil hydraulics (cryosuction, ice impedance, storage of a saturated frozen cell) and is still to be isolated.
 
-  On frozen mornings the port thaws the top centimetres faster than GEOtop at the same heat flux into the soil. The cause is in the frozen-soil closures of the top cells, not in the balance; the imposed `Tsurface` was hiding it.
+**The bare-soil energy balance** (`run.sh seb`) reproduces GEOtop's fluxes without snow over 742 hours:
+
+- Ts: RMSE 0.10 K;
+- SWnet, LWnet, H, LE: RMSE 1.1, 0.5, 0.7 and 0.5 W m⁻²;
+- heat flux into the soil: RMSE 5.4 W m⁻².
+
+The evaporation is still GEOtop's `Evap_surface`, as a conditioned input (LINK-2). Nothing was tuned.
