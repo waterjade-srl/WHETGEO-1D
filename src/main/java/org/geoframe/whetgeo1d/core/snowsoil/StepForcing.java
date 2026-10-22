@@ -53,10 +53,24 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceForcing;
  *                           in {@code RichardsSolver1D} (ψ [m] for Dirichlet,
  *                           flux for Neumann; unused with free drainage or
  *                           an impervious bottom), COL-6
+ * @param snowTop            condition at the top of the snow when there is
+ *                           snow at the start of the step, in place of the
+ *                           surface energy balance (COL-6): an imposed surface
+ *                           temperature, capped at 0 °C over snow, or an
+ *                           imposed flux into the column; null for the surface
+ *                           energy balance, the normal case
  */
 public record StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
 		double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta,
-		double[] soilWaterSinks, double precipitationTemperature, double soilWaterBottomValue) {
+		double[] soilWaterSinks, double precipitationTemperature, double soilWaterBottomValue, TopBoundary snowTop) {
+
+	/** Forcing with the surface energy balance over snow. */
+	public StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
+			double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta,
+			double[] soilWaterSinks, double precipitationTemperature, double soilWaterBottomValue) {
+		this(surface, snowfall, rainfall, groundAlbedoVisible, groundAlbedoNearInfrared, bareSoilTop, bottomValue,
+				timeDelta, soilWaterSinks, precipitationTemperature, soilWaterBottomValue, null);
+	}
 
 	/** Forcing with evapotranspiration, no precipitation temperature and a zero bottom value for Richards. */
 	public StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,

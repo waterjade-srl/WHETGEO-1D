@@ -222,6 +222,16 @@ public class SnowSoilSolver1DMain extends HMModel {
 		BULK_TRANSFER
 	}
 
+	/** Heat condition at the top of the snow (COL-6). */
+	public enum SnowTop {
+		/** The surface energy balance of the snow library, the normal case. */
+		SURFACE_ENERGY_BALANCE,
+		/** Imposed snow-surface temperature [°C], capped at 0 °C. */
+		DIRICHLET,
+		/** Imposed flux into the snow [W m-2]. */
+		NEUMANN
+	}
+
 	/** How total precipitation is split. */
 	public enum Partition {
 		/** GEOtop's linear ramp between T_snow and T_rain. */
@@ -463,6 +473,15 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public Map<Integer, double[]> inTopBC;
 
+	@Description("Heat at the top of the snow: Surface Energy Balance (default), Dirichlet or Neumann.")
+	@In
+	public String snowTopType = "Surface Energy Balance";
+	@Description("Constant value of the snow top: temperature [°C, capped at 0] or flux into the snow [W m-2].")
+	@In
+	public double snowTopValue = Double.NaN;
+	@In
+	public Map<Integer, double[]> inSnowTopBC;
+
 	@Description("Heat at the bottom: Bottom Dirichlet, Bottom Neumann, Bottom No Gradient.")
 	@In
 	public String bottomBCType = "Bottom No Gradient";
@@ -632,6 +651,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private IncomingLongwave.ClearSkyEmissivity emissivity;
 	private PrecipitationPartition partition;
 	private BareSoilTop bareSoilTop;
+	private SnowTop snowTop;
 	private DiffusionBoundaryConditionType bottomType;
 	private double[] soilDepth;
 	private double[] soilThickness;
@@ -830,6 +850,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 				: new PrecipitationPartition.GeotopLinear(rainThreshold + MELTING_TEMPERATURE,
 						snowThreshold + MELTING_TEMPERATURE);
 		bareSoilTop = EnumUtils.fromString(BareSoilTop.class, bareSoilTopType);
+		snowTop = EnumUtils.fromString(SnowTop.class, snowTopType);
 
 		Map<String, String> attributes = new LinkedHashMap<>();
 		attributes.put("snowThermalConductivity", conductivity.name());
@@ -840,6 +861,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("temperatureHeight", Double.toString(temperatureHeight));
 		attributes.put("soilWaterMode", EnumUtils.fromString(SoilWaterMode.class, soilWaterMode).name());
 		attributes.put("bareSoilTop", bareSoilTop.name());
+		attributes.put("snowTop", snowTop.name());
 		attributes.put("bottomBC", bottomType.name());
 		attributes.put("soilWaterBottomBC", water == null ? "none" : water.bottomType().name());
 		attributes.put("latitude", Double.toString(latitude));
@@ -1154,8 +1176,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 		default -> 0.0;
 		};
 		double waterBottom = series(inSoilWaterBottomBC, soilWaterBottomValue, "soil water bottom");
+		TopBoundary overSnow = switch (snowTop) {
+		case SURFACE_ENERGY_BALANCE -> null;
+		case DIRICHLET -> new TopBoundary.SurfaceTemperature(
+				series(inSnowTopBC, snowTopValue, "snow top") + MELTING_TEMPERATURE);
+		case NEUMANN -> TopBoundary.SurfaceFlux.constant(series(inSnowTopBC, snowTopValue, "snow top"));
+		};
 		return new StepForcing(surface, snow, rain, groundAlbedo, groundAlbedo, top, bottom, dt, null,
-				precipitationTemperature, waterBottom);
+				precipitationTemperature, waterBottom, overSnow);
 	}
 
 	private void publish(SnowSoilStepResult r) {
