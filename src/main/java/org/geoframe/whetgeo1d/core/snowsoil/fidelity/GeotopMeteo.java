@@ -39,9 +39,10 @@ import java.util.Map;
  * {@code HeaderJulianDayfrom0Meteo} when the file has it, otherwise with the
  * date column. Times are GEOtop's JDfrom0, days from year 0 in local standard
  * time, with 01/01/1970 00:00 = 719529 ({@code times.cc}). When the two
- * columns of a file disagree GEOtop follows the JDfrom0 column; in
- * Matsch_P2_Ref_007 that column is one day behind the dates, so GEOtop's
- * forcing at a date is the record dated one day later.</li>
+ * columns of a file disagree GEOtop follows the JDfrom0 column
+ * ({@code fixing_dates}, {@code meteodata.cc:583-621}). In the official
+ * Matsch_P2_Ref_007 file that column is one day behind the dates, a data
+ * error: the corrected reference has the column put right.</li>
  * <li><b>Stepping.</b> Without {@code LinearInterpolation} (the default)
  * GEOtop averages over each step [t<sub>b</sub>, t<sub>e</sub>] the piecewise
  * constant series in which record i holds over (t<sub>i-1</sub>,

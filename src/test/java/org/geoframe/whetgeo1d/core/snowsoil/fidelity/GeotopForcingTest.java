@@ -39,8 +39,9 @@ import org.junit.Test;
 
 /**
  * The fidelity forcing tools against what GEOtop 3.0 (commit 1f1fc5af) wrote
- * in the point output of Matsch_P2_Ref_007 without canopy
- * ({@code cases/snowsoil/matsch_p2_ref_007/geotop}): each hourly row of
+ * in the point output of the corrected Matsch_P2_Ref_007 without canopy
+ * ({@code cases/snowsoil/matsch_p2_ref_007/geotop}: JDfrom0 put right,
+ * {@code ActualOrProjectedArea = 1}, no cloud column): each hourly row of
  * GEOtop is the mean (fluxes, states) or the sum (precipitation) of its four
  * 900 s steps, which the tools compute here one by one.
  */
@@ -59,8 +60,7 @@ public class GeotopForcingTest {
 		GeotopMeteo meteo = GeotopMeteo.read(CASE.resolve("meteo0001.txt"), "Date", "JDfrom0");
 		return new GeotopForcing(meteo, GeotopForcing.Headers.geotop(), 46.668, 10.579, 1.0, 1549.0, 21.4, 221.6,
 				Horizon.read(CASE.resolve("horizon0001.txt")), Horizon.flat(), 1.0,
-				new GeotopPrecipitation(3.0, -3.2, 1.0, 1.398), IncomingLongwave.ClearSkyEmissivity.IDSO_HODGES,
-				GeotopForcing.CloudAverage.KIMBALL);
+				new GeotopPrecipitation(3.0, -3.2, 1.0, 1.398), IncomingLongwave.ClearSkyEmissivity.IDSO_HODGES);
 	}
 
 	static Map<String, double[]> readPoint(Path file) throws IOException {
@@ -151,7 +151,7 @@ public class GeotopForcingTest {
 	}
 
 	@Test
-	public void precipitationSplitCorrectedAndProjected() {
+	public void precipitationSplitCorrectedAndProjectedOnce() {
 		// GEOtop prints 6 decimals
 		assertTrue(compare("Prain", "Prain_over_canopy[mm]")[0] < 1e-5);
 		assertTrue(compare("Psnow", "Psnow_over_canopy[mm]")[0] < 1e-5);
@@ -165,7 +165,28 @@ public class GeotopForcingTest {
 	}
 
 	@Test
-	public void longwaveIdsoHodgesWithKimballClouds() {
+	public void averagedCloudinessAsGeotopFillsIt() throws IOException {
+		// GEOtop writes the series it computed back into the meteo file
+		GeotopMeteo filled = GeotopMeteo.read(CASE.resolve("meteo0001_cloud_filled_by_geotop.txt"), "Date", "JDfrom0");
+		double[] geotop = filled.column("CloudTrans");
+		double[] ours = matsch().averagedCloudTransmissivity();
+		double max = 0.0;
+		int defined = 0;
+		// the file of the case is cut on 4 November, GEOtop's ran on to 2015: the last night and day differ
+		int end = ours.length - 48;
+		for (int k = 0; k < end; k++) {
+			assertEquals("record " + k, Double.isNaN(geotop[k]), Double.isNaN(ours[k]));
+			if (!Double.isNaN(geotop[k])) {
+				max = Math.max(max, Math.abs(geotop[k] - ours[k]));
+				defined++;
+			}
+		}
+		System.out.printf("averaged cloudiness: %d records, max |diff| %.3g%n", defined, max);
+		assertTrue(defined > 700 && max < 1e-5);
+	}
+
+	@Test
+	public void longwaveIdsoHodgesWithShortwaveClouds() {
 		assertTrue(compare("LWmin", "LWin_min[W/m2]")[0] < 1e-2);
 		assertTrue(compare("LWin", "LWin[W/m2]")[0] < 1e-2);
 	}

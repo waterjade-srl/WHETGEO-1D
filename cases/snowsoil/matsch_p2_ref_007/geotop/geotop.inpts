@@ -260,3 +260,5 @@ SurfaceTempMapFile			=	"maps/Ts"
 
 !>>!ObservationProfileFile = "obs/obs"
 !>>!ObservationLookupTblFile = "lookup_tbl_observation"
+! --- GEO2GEO: variante corretta ---
+ActualOrProjectedArea = 1

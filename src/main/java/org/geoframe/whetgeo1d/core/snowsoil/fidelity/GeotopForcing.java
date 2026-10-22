@@ -42,25 +42,30 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
  * <li>pressure: P<sub>0</sub> e<sup>-z/8500</sup> at the station
  * elevation ({@code pressure}, {@code meteo.cc});</li>
  * <li>rain and snow: {@link GeotopPrecipitation} on the intensity times
- * cos²β: GEOtop takes the precipitation normal to the slope, and projects it
- * once more in a point simulation ({@code energy.balance.cc:299-304});</li>
+ * cos β, the vertical flux per unit area of the slope, which is the area of
+ * a column normal to it ({@code energy.balance.cc:299-301}). GEOtop projects
+ * a second time in a point simulation unless {@code ActualOrProjectedArea = 1}
+ * ({@code energy.balance.cc:302-304}); that second cosine is an error, not
+ * reproduced here (the corrected reference sets the keyword);</li>
  * <li>cloud transmissivity of the step from the global shortwave
  * ({@code find_tau_cloud_station}; {@link CloudTransmissivity#fromGlobal},
  * flat station, V = 1), and, where undefined (night), the averaged one;</li>
- * <li>averaged cloud transmissivity, of two kinds ({@link CloudAverage}).
- * GEOtop fills it from the shortwave only when the file has no cloud column
- * at all ({@code input.cc:405-424}); a cloud column of -9999 (as in
- * Matsch_P2_Ref_007) leaves it undefined, and GEOtop falls back, step by step,
- * to Kimball's τ = 1 - 0.71 f<sub>cloud</sub> with Walcek's cloud fraction
- * from the relative humidity at 700 hPa ({@code find_cloudfactor},
- * {@code meteodistr.cc:513-549}; {@code energy.balance.cc:447-449}), lapse
- * rates 6.5 and 2.5 °C km-1. Otherwise, GEOtop's series on the records of the
- * file ({@code cloudiness}, {@code clouds.cc}): each record's τ<sub>c</sub>
- * over the interval centred on it, the daylight records those where the sun
- * clears the station horizon by {@value Horizon#MOUNTAIN_TOLERANCE}° and
- * stands {@value Horizon#FLAT_TOLERANCE}° high ({@code find_sunset}), the
- * series of {@link DailyCloudiness#geotopSeries}; stepped like the other
- * columns;</li>
+ * <li>averaged cloud transmissivity of the longwave: GEOtop's daily series
+ * on the records of the file ({@code cloudiness}, {@code clouds.cc}): each
+ * record's τ<sub>c</sub> from the measured shortwave over the interval
+ * centred on it, the daylight records those where the sun clears the station
+ * horizon by {@value Horizon#MOUNTAIN_TOLERANCE}° and stands
+ * {@value Horizon#FLAT_TOLERANCE}° high ({@code find_sunset}), the series of
+ * {@link DailyCloudiness#geotopSeries}; stepped like the other columns.
+ * Where the series is undefined (before the first daylight period of the
+ * file) GEOtop takes, step by step, Kimball's τ = 1 - 0.71 f<sub>cloud</sub>
+ * with Walcek's cloud fraction from the relative humidity at 700 hPa
+ * ({@code find_cloudfactor}, {@code meteodistr.cc:513-549};
+ * {@code energy.balance.cc:447-449}), lapse rates 6.5 and 2.5 °C km-1; so does
+ * this class. GEOtop computes the series only when the file has no cloud
+ * column ({@code input.cc:405-408}): a column of -9999 leaves it undefined for
+ * the whole run, an error of the input that the corrected reference
+ * removes;</li>
  * <li>incoming longwave: V ε<sub>a</sub> σ T<sub>a</sub>⁴ with the case's
  * clear-sky emissivity ({@link IncomingLongwave});</li>
  * <li>shortwave on the slope: {@link SlopeShortwave}.</li>
@@ -75,14 +80,6 @@ public final class GeotopForcing {
 	/** GEOtop's {@code RHmin} [%]. */
 	public static final double MINIMUM_RELATIVE_HUMIDITY = 10.0;
 	private static final double GEOTOP_SEA_LEVEL_PRESSURE = 101325.0;
-
-	/** Where GEOtop's averaged cloud transmissivity comes from. */
-	public enum CloudAverage {
-		/** The series filled from the measured shortwave (file without a cloud column). */
-		SHORTWAVE_SERIES,
-		/** Kimball and Walcek from T and RH (file with an empty cloud column). */
-		KIMBALL
-	}
 
 	/** Column headers of the meteorological file, as in geotop.inpts. */
 	public record Headers(String precipitation, String windSpeed, String relativeHumidity, String airTemperature,
@@ -128,9 +125,7 @@ public final class GeotopForcing {
 	private final SlopeShortwave shortwave;
 	private final CloudTransmissivity clouds;
 	private final double[] averagedSeries;
-	private final CloudAverage cloudAverage;
 	private final double elevation;
-	private double lastAveraged = Double.NaN;
 
 	/**
 	 * @param meteo          the meteorological file
@@ -146,14 +141,10 @@ public final class GeotopForcing {
 	 * @param skyViewFactor  V of the point
 	 * @param precipitation  split and corrections
 	 * @param emissivity     clear-sky emissivity ({@code LWinParameterization})
-	 * @param cloudAverage   source of the averaged cloud transmissivity
 	 */
 	public GeotopForcing(GeotopMeteo meteo, Headers headers, double latitude, double longitude, double standardTime,
 			double elevation, double slope, double aspect, Horizon stationHorizon, Horizon pointHorizon,
-			double skyViewFactor, GeotopPrecipitation precipitation, IncomingLongwave.ClearSkyEmissivity emissivity,
-			CloudAverage cloudAverage) {
-		this.cloudAverage = Objects.requireNonNull(cloudAverage, "cloudAverage");
-		this.elevation = elevation;
+			double skyViewFactor, GeotopPrecipitation precipitation, IncomingLongwave.ClearSkyEmissivity emissivity) {
 		this.meteo = Objects.requireNonNull(meteo, "meteo");
 		this.headers = Objects.requireNonNull(headers, "headers");
 		this.site = SolarGeometry.ofDegrees(latitude, longitude, standardTime);
@@ -162,7 +153,8 @@ public final class GeotopForcing {
 		this.precipitation = Objects.requireNonNull(precipitation, "precipitation");
 		this.emissivity = Objects.requireNonNull(emissivity, "emissivity");
 		this.skyViewFactor = skyViewFactor;
-		this.projection = Math.cos(Math.toRadians(slope)) * Math.cos(Math.toRadians(slope));
+		this.projection = Math.cos(Math.toRadians(slope));
+		this.elevation = elevation;
 		ClearSkyTransmissivity clearSky = ClearSkyTransmissivity.geotop();
 		this.clouds = new CloudTransmissivity(site, clearSky, 1.0, 0.0);
 		this.shortwave = new SlopeShortwave(site, clearSky, Math.toRadians(slope), Math.toRadians(aspect),
@@ -225,19 +217,13 @@ public final class GeotopForcing {
 		double ta = meteo.stepMean(headers.airTemperature(), begin, end);
 		double rh = Math.max(meteo.stepMean(headers.relativeHumidity(), begin, end), MINIMUM_RELATIVE_HUMIDITY);
 		double wind = Math.max(meteo.stepMean(headers.windSpeed(), begin, end), MINIMUM_WIND);
-		// GEOtop takes the precipitation normal to the slope, and once more in a point simulation
-		// (energy.balance.cc:299-304): P cos²β
+		// per unit area of the slope: P cos β
 		double intensity = Math.max(0.0, meteo.stepMean(headers.precipitation(), begin, end)) * projection;
 		double global = Math.max(0.0, meteo.stepMean(headers.shortwaveGlobal(), begin, end));
 		GeotopPrecipitation.Split split = precipitation.split(intensity, ta, timeStep);
 
-		double averaged = cloudAverage == CloudAverage.KIMBALL ? kimball(ta, rh / 100.0, elevation)
-				: stepMeanOfSeries(begin, end);
-		if (Double.isNaN(averaged)) {
-			averaged = lastAveraged;
-		}
-		lastAveraged = averaged;
-		averaged = Math.max(0.0, Math.min(1.0, averaged));
+		double averaged = stepMeanOfSeries(begin, end);
+		averaged = Double.isNaN(averaged) ? kimball(ta, rh / 100.0, elevation) : Math.max(0.0, Math.min(1.0, averaged));
 
 		double dayEnd = dayOfYear(end);
 		double dayBegin = dayEnd - timeStep / 86400.0;
@@ -252,6 +238,11 @@ public final class GeotopForcing {
 		double lw = IncomingLongwave.of(emissivity, taK, humidity, pressure, averaged, skyViewFactor);
 		return new Step(ta, rh, wind, pressure, split.rain(), split.snow(), global, sw.beam(), sw.diffuse(),
 				sw.cosIncidence(), lw, stepTau, averaged);
+	}
+
+	/** GEOtop's averaged cloud transmissivity at the records of the file, NaN where undefined. */
+	public double[] averagedCloudTransmissivity() {
+		return averagedSeries.clone();
 	}
 
 	/**

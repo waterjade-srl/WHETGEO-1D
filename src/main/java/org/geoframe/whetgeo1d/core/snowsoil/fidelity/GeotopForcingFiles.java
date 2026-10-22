@@ -88,7 +88,7 @@ public final class GeotopForcingFiles {
 	 * {@code longitude}, {@code standardTime}, {@code elevation}, {@code slope},
 	 * {@code aspect}, {@code skyViewFactor}, {@code rainThreshold},
 	 * {@code snowThreshold}, {@code rainCorrection}, {@code snowCorrection},
-	 * {@code clearSkyEmissivity}, {@code cloudAverage}, {@code firstStepEnd}
+	 * {@code clearSkyEmissivity}, {@code firstStepEnd}
 	 * and {@code lastStepEnd} (UTC, yyyy-MM-dd HH:mm), {@code timeStep} [s],
 	 * {@code outputFolder}, {@code stationID}, {@code geotopPointFile}
 	 * (optional: the fallbacks).
@@ -104,8 +104,7 @@ public final class GeotopForcingFiles {
 				number(p, "skyViewFactor"),
 				new GeotopPrecipitation(number(p, "rainThreshold"), number(p, "snowThreshold"),
 						number(p, "rainCorrection"), number(p, "snowCorrection")),
-				EnumUtils.fromString(IncomingLongwave.ClearSkyEmissivity.class, p.getProperty("clearSkyEmissivity")),
-				EnumUtils.fromString(GeotopForcing.CloudAverage.class, p.getProperty("cloudAverage")));
+				EnumUtils.fromString(IncomingLongwave.ClearSkyEmissivity.class, p.getProperty("clearSkyEmissivity")));
 		long first = LocalDateTime.parse(p.getProperty("firstStepEnd"), OMS).toEpochSecond(ZoneOffset.UTC);
 		long last = LocalDateTime.parse(p.getProperty("lastStepEnd"), OMS).toEpochSecond(ZoneOffset.UTC);
 		long dt = (long) number(p, "timeStep");

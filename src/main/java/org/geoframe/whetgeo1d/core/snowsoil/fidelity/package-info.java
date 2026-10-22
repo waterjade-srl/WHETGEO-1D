@@ -28,9 +28,11 @@
  * <p>
  * In the GEOframe chain these belong to the components upstream of the
  * column (OmsTimeSeriesIteratorReader, RainSnowSep, ShortWaveRadiationBalance,
- * LongWaveRadiationBalance); here they reproduce GEOtop, quirks included, so
- * that a difference between the port and GEOtop is not a difference of
- * forcing. Whether any of this moves to those components is open (LINK-1,
+ * LongWaveRadiationBalance); here they reproduce GEOtop, so that a difference
+ * between the port and GEOtop is not a difference of forcing. Behaviours of
+ * GEOtop that are errors (the second projection of the precipitation in a
+ * point simulation, Kimball's cloudiness when the file has an empty cloud
+ * column) are not reproduced: the reference run is corrected instead. Whether any of this moves to those components is open (LINK-1,
  * ORG-4). Every class names the GEOtop routine it follows; the formulas
  * shared with the component's own estimates
  * ({@link org.geoframe.whetgeo1d.core.snowsoil.forcing}) are reused from
