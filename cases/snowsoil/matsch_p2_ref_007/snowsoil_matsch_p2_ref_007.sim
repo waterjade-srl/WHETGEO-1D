@@ -4,7 +4,7 @@
  * The GEOtop 3.0 official 1D test, station P2 in Val Mazia, 46.668 N,
  * 10.579 E, 1549 m, slope 21.4°, aspect 221.6°, 2 October - 2 November 2009,
  * steps of 900 s, hourly outputs, with CanopyFraction = 0 (the strict
- * reference, run by casi/Matsch_P2_Ref_007/run.sh senza_chioma). See README.md.
+ * reference: casi/Matsch_P2_Ref_007/run.sh corretta, three errors of the official case removed). See README.md.
  *
  * Forcing: data/*.csv, written by run.sh with the temporary fidelity tools
  * (org.geoframe.whetgeo1d.core.snowsoil.fidelity) from GEOtop's own input

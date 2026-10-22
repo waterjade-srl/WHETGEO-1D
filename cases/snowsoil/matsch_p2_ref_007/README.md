@@ -1,6 +1,15 @@
 # Matsch_P2_Ref_007: fidelity run against GEOtop 3.0
 
-This case is the snow+soil column in the *fidelity* configuration on GEOtop 3.0's official 1D test `Matsch_P2_Ref_007`, run **without canopy** (`CanopyFraction = 0`). That variant is the strict reference of phase 2.1, because the canopy is out of the port's scope (SCOPE-1).
+This case is the snow+soil column in the *fidelity* configuration on GEOtop 3.0's official 1D test `Matsch_P2_Ref_007`, run **without canopy and corrected**. That variant is the strict reference of phase 2.1.
+
+The reference differs from the official case in four ways:
+
+- `CanopyFraction = 0`, because the canopy is out of the port's scope (SCOPE-1);
+- the meteo file's `JDfrom0` column is put right: in the official file it is one day behind the dates, and GEOtop trusts it over the dates (`fixing_dates`, `meteodata.cc:583`);
+- `ActualOrProjectedArea = 1` is set: without it GEOtop projects the precipitation a second time in a point simulation, `P cos²β` (`energy.balance.cc:299-304`);
+- the empty `CloudTrans` column (-9999) is dropped: with it GEOtop never computes the daily cloudiness from the measured shortwave (`input.cc:405-408`), and falls back to Kimball from T and RH.
+
+The corrected reference therefore no longer equals the official test output.
 
 The case:
 
@@ -23,7 +32,7 @@ The run needs JDK 21, Maven (offline works) and `oms-3.5.12.jar` in the local Ma
 
 | Path | Content |
 |---|---|
-| `geotop/` | the GEOtop 3.0 run without canopy: `geotop.inpts`, `meteo0001.txt` (October 2009 only), `horizon0001.txt`, `soil0001.txt`, and its outputs `output-tabs/` (snow layer files cut to L1–L5). It was produced by `casi/Matsch_P2_Ref_007/run.sh senza_chioma` of the GEO2GEO workspace, with the binary at sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af. `point0001.txt` sha256: `af000d2e…b147` |
+| `geotop/` | the corrected GEOtop 3.0 run without canopy, produced by `casi/Matsch_P2_Ref_007/run.sh corretta` of the GEO2GEO workspace (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt`; `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `adc1d23e…2338` |
 | `forcing.properties` | the case's settings for the forcing tools |
 | `data/` | OMS CSV forcing at 900 s, written by `run.sh` (`GeotopForcingFiles`) |
 | `grid/` | the soil as WHETGEO-1D CSV inputs |
@@ -36,11 +45,11 @@ The forcing is GEOtop's own forcing, computed from GEOtop's input files by the t
 
 | Quantity | How GEOtop computes it | Max difference |
 |---|---|---|
-| Ta, RH, wind | step means of the meteo file. GEOtop reads its `JDfrom0` column, which here is **one day behind the dates**: the forcing at a date is the record dated one day later | 1e-8 °C, 5e-5, 0.013 m s⁻¹ |
+| Ta, RH, wind | step means of the meteo file, dated by its `JDfrom0` column as GEOtop does | 1e-8 °C, 5e-5, 0.013 m s⁻¹ |
 | pressure | 1013.25 e^(−z/8500) hPa | 2e-7 hPa |
-| rain, snow | linear ramp −3.2…3 °C, `SnowCorrFactor` 1.398 applied at the station, split again at the point, times **cos² of the slope** (GEOtop projects twice in a point simulation) | 5e-7 mm |
+| rain, snow | linear ramp −3.2…3 °C, `SnowCorrFactor` 1.398 applied at the station, split again at the point, times cos β (the flux per unit area of a column normal to the slope) | 5e-7 mm |
 | SW beam and diffuse | on the slope: Iqbal clear sky, Erbs diffuse fraction, τ_c from the measured global SW. The point horizon is flat; the station horizon is used only for the cloudiness | 6e-4 W m⁻² |
-| LW in | Idso + Hodges (`LWinParameterization = 4`). The meteo file has an empty `CloudTrans` column, so GEOtop does **not** fill the averaged cloudiness from SW: it uses Kimball/Walcek from T and RH at every step | 7e-3 W m⁻² |
+| LW in | Idso + Hodges (`LWinParameterization = 4`) with GEOtop's daily cloudiness from the measured SW (`DailyCloudiness.geotopSeries`; the series matches the one GEOtop writes back to 5e-7), and Kimball/Walcek before the first daylight period, as GEOtop | 3e-3 W m⁻² |
 
 Two quantities are fallbacks, taken from GEOtop's own output (DN-14):
 
@@ -78,22 +87,20 @@ The soil and its conditions:
 
 ## Result
 
-The run takes 3068 steps and every heat solve converges. The full comparison against the proposed VAL-1 tolerances is in the notebook. In short:
+The run takes 3068 steps, every heat solve converges, and it runs in about 8 s. The full comparison against the proposed VAL-1 tolerances is in the notebook. In short:
 
 - **Within the proposed tolerances:**
-  - SWE: RMSE 0.14 mm;
-  - HS: RMSE 0.8 mm;
-  - melt (−2 %);
-  - snow runoff (−6 %);
+  - SWE: RMSE 0.02 mm, peak −8 %;
+  - HS: RMSE 1.7 mm;
   - LWnet with snow;
-  - soil temperature bias down to 0.35 m;
+  - soil temperature below 10 cm: bias ≤ 0.04 K, RMSE ≤ 0.09 K;
   - θw below 15 mm;
   - maximum frost depth: same cell, 15 mm.
 - **Beyond the tolerances:**
-  - SWE peak +21 %, and HS max differs by 6.6 mm;
-  - Tsurface, SWnet, H and LE with snow;
-  - soil temperature RMSE 0.24–0.42 K in the top 10 cm;
-  - deep soil bias of +0.13 K;
+  - HS max, by 20 mm: GEOtop keeps the thickness of a melting single layer;
+  - melt −11 % and runoff −21 %;
+  - Ts, SWnet, H and LE with snow: thin snow is not ported;
+  - soil RMSE 0.25–0.40 K at 15–85 mm: the conditioned bare-soil top;
   - θ at the top cell.
 
-  The notebook attributes each one: thin snow not ported, rain on the fresh pack and its density, a GEOtop residual pack after 21 October, the conditioned bare-soil top, and the soil heat closures. Nothing was tuned.
+  The notebook explains each one. Nothing was tuned.
