@@ -659,6 +659,11 @@ public class SnowSoilSolver1DMain extends HMModel {
 	/** Closes the writers at the end of the run. */
 	@Finalize
 	public void close() throws IOException {
+		if (controller != null && activeWriters != null) {
+			RunDiagnostics d = controller.diagnostics();
+			System.out.println("snowsoil: " + d.intervals() + " steps, " + d.substeps() + " accepted solver steps, "
+					+ d.rejections() + " rejected, " + d.degradedSteps() + " degraded");
+		}
 		if (activeWriters == null) {
 			return;
 		}
@@ -688,7 +693,12 @@ public class SnowSoilSolver1DMain extends HMModel {
 	 * (ARCH-5). The solver is never stepped otherwise.
 	 */
 	private SnowSoilStepResult advance(StepForcing forcing) {
-		return controller.advance(forcing).result();
+		StepController.ControlledStep step = controller.advance(forcing);
+		// every rejection goes to the log of the run (SOL-5 item 5)
+		for (org.geoframe.whetgeo1d.core.snowsoil.StepRejection rejection : step.rejections()) {
+			System.out.println("snowsoil: " + rejection.describe());
+		}
+		return step.result();
 	}
 
 	/**
