@@ -141,6 +141,8 @@ final class StepAccumulator {
 	private int steps;
 
 	private List<SnowCell> snow = List.of();
+	private SurfaceFluxes bareSoil;
+	private double bareSoilTemperature = Double.NaN;
 	private double[] soilTemperature;
 	private double[] soilIce;
 	private double[] soilSuction;
@@ -177,6 +179,12 @@ final class StepAccumulator {
 		}
 	}
 
+	/** The bare-soil surface fluxes of the next step added, or null. */
+	void bareSoilSurface(SurfaceFluxes fluxes, double surfaceTemperature) {
+		bareSoil = fluxes;
+		bareSoilTemperature = surfaceTemperature;
+	}
+
 	/** Adds one step. */
 	void add(SnowSoilSolver solver, SnowSoilStepResult r) {
 		steps++;
@@ -202,6 +210,9 @@ final class StepAccumulator {
 		put("snowCells", snow.size());
 		put("surfaceAge", r.surfaceAge());
 		double ts = r.surfaceTemperature();
+		if (Double.isNaN(ts) && bareSoil != null) {
+			ts = bareSoilTemperature;
+		}
 		if (Double.isNaN(ts) && soilTemperature.length > 0) {
 			ts = soilTemperature[soilTemperature.length - 1];
 		}
@@ -209,14 +220,15 @@ final class StepAccumulator {
 		put("pendingSurfaceEnergy", r.pendingSurfaceEnergy());
 		put("soilWaterStorage", solver.soilWaterStorage());
 
-		SurfaceFluxes f = r.surface();
+		SurfaceFluxes f = r.surface() != null ? r.surface() : bareSoil;
+		bareSoil = null;
 		double topFlux = r.heat().surfaceFlux();
 		put("albedo", r.albedo());
 		put("netShortwave", f == null ? Double.NaN : f.netShortwave());
 		put("netLongwave", f == null ? Double.NaN : f.netLongwave());
 		put("sensibleHeat", f == null ? Double.NaN : f.sensibleHeat());
 		put("latentHeat", f == null ? Double.NaN : f.latentHeatFlux());
-		put("surfaceEnergyBalance", f == null ? topFlux : f.energyBalance());
+		put("surfaceEnergyBalance", r.surface() == null ? topFlux : f.energyBalance());
 		put("surfaceHeatFlux", topFlux);
 		put("snowToSoilHeatFlux", r.heat().snowToSoilFlux());
 

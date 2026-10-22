@@ -31,6 +31,7 @@ import java.util.Set;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilStepResult;
 import org.geoframe.whetgeo1d.snow.SnowCell;
+import org.geoframe.whetgeo1d.snow.surface.SurfaceFluxes;
 
 import ucar.ma2.Array;
 import ucar.ma2.ArrayDouble;
@@ -262,6 +263,11 @@ public final class SnowSoilNetcdfWriter implements SnowSoilOutputWriter {
 			throw new IOException(e);
 		}
 		record++;
+	}
+
+	@Override
+	public void bareSoilSurface(SurfaceFluxes fluxes, double surfaceTemperature) {
+		accumulator.bareSoilSurface(fluxes, surfaceTemperature);
 	}
 
 	@Override
