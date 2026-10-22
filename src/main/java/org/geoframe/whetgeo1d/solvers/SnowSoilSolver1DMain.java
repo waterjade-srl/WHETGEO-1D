@@ -22,6 +22,8 @@ import static org.geoframe.whetgeo1d.snow.SnowConstants.MELTING_TEMPERATURE;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -40,11 +42,16 @@ import org.geoframe.whetgeo1d.core.boundaryconditions.IBoundaryCondition.Richard
 import org.geoframe.whetgeo1d.core.snowsoil.IceAwareRetention;
 import org.geoframe.whetgeo1d.core.snowsoil.NewtonSettings;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
+import org.geoframe.whetgeo1d.core.snowsoil.RunDiagnostics;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowProcesses;
+import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilRestart;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilStepResult;
 import org.geoframe.whetgeo1d.core.snowsoil.SoilHeatSetup;
 import org.geoframe.whetgeo1d.core.snowsoil.SoilWaterProperties;
+import org.geoframe.whetgeo1d.core.snowsoil.StepControlSettings;
+import org.geoframe.whetgeo1d.core.snowsoil.StepControlSettings.FailurePolicy;
+import org.geoframe.whetgeo1d.core.snowsoil.StepController;
 import org.geoframe.whetgeo1d.core.snowsoil.StepForcing;
 import org.geoframe.whetgeo1d.core.snowsoil.TopBoundary;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.CloudTransmissivity;
@@ -54,9 +61,13 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
 import org.geoframe.whetgeo1d.core.utils.EnumUtils;
+import org.geoframe.whetgeo1d.io.snowsoil.OutputOptions;
 import org.geoframe.whetgeo1d.io.snowsoil.RunHeader;
+import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilCsvWriter;
+import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilNetcdfWriter;
 import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilOutputWriter;
 import org.geoframe.whetgeo1d.io.snowsoil.SoilGridInputs;
+import org.geoframe.whetgeo1d.io.snowsoil.SoilWaterContent;
 import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
 import org.geoframe.whetgeo1d.snow.SnowThermalConductivity;
 import org.geoframe.whetgeo1d.snow.surface.MoninObukhov;
@@ -159,12 +170,24 @@ import oms3.annotations.Unit;
  * <b>Outputs.</b> Each step goes to every {@link SnowSoilOutputWriter} of
  * {@link #createWriters()}, after a {@link RunHeader} with the code version,
  * the configuration, SHA-256 of the input files and the soil grid (VAL-7). The
- * main scalars and profiles are also {@code @Out} fields, for chaining.
+ * main scalars and profiles are also {@code @Out} fields, for chaining. With
+ * an {@code outputPath} and no writers given, the NetCDF file and the
+ * GEOtop-like CSV files go there, one record every {@code outputInterval}.
  *
  * <p>
- * Not here: non-convergence handling and restart (the step controller of phase
- * 1.4 replaces {@link #advance}), evapotranspiration sinks from GEOET, an
- * initial snowpack, a slope.
+ * <b>Step control and restart</b> (SOL-5, ARCH-5). The column is stepped
+ * only through a {@link StepController}: a step that does not converge is
+ * rolled back and covered by halved sub-steps, up to {@code maxHalvings};
+ * {@code onNonConvergence} says what happens beyond. Every
+ * {@code restartInterval} seconds the state goes to {@code restartPath}, the
+ * solver's state in {@code snowsoil_restart_<t>.bin} and the component's
+ * (the running daily cloud transmissivity) in {@code .forcing} beside it;
+ * {@code resumeFrom} carries a run on from such a state, bit for bit, with
+ * the same configuration (checked through its hash).
+ *
+ * <p>
+ * Not here: evapotranspiration sinks from GEOET, an initial snowpack, a
+ * slope.
  */
 @Description("Snow and soil column: snowpack on WHETGEO-1D's soil, heat of snow and soil as one system, Richards and frozen soil, GEOtop 3.0 physics in the fidelity configuration.")
 @Documentation("")
@@ -521,9 +544,33 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Where the output writers write (folder or file prefix).")
 	@In
 	public String outputPath = "";
+	@Description("Period of the output records [s], aggregated as GEOtop's DtPlotPoint; 0: every step.")
+	@In
+	@Unit("s")
+	public long outputInterval = 0;
 	@Description("Writers to use instead of the default ones of createWriters(), e.g. in tests.")
 	@In
 	public List<SnowSoilOutputWriter> writers;
+
+	/*
+	 * STEP CONTROL AND RESTART (SOL-5, ARCH-5)
+	 */
+	@Description("Halvings of a step that does not converge before giving up (SOL-5).")
+	@In
+	public int maxHalvings = 4;
+	@Description("When the finest sub-step still fails: Stop (the default) or Flag (accept it, marked degraded).")
+	@In
+	public String onNonConvergence = "Stop";
+	@Description("Folder of the restart states; empty: none.")
+	@In
+	public String restartPath = "";
+	@Description("Period of the restart states [s]; 0: none.")
+	@In
+	@Unit("s")
+	public double restartInterval = 0.0;
+	@Description("Restart state to carry on from; empty: start from the initial conditions.")
+	@In
+	public String resumeFrom = "";
 
 	@Out
 	@Unit("kg m-2")
@@ -567,8 +614,12 @@ public class SnowSoilSolver1DMain extends HMModel {
 	public SnowSoilStepResult outStepResult;
 	@Out
 	public RunHeader outRunHeader;
+	@Out
+	public RunDiagnostics outRunDiagnostics;
 
 	private SnowSoilSolver solver;
+	private StepController controller;
+	private OutputOptions outputOptions;
 	private List<SnowSoilOutputWriter> activeWriters;
 	private SolarGeometry site;
 	private CloudTransmissivity clouds;
@@ -590,6 +641,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		StepForcing forcing = forcing(end);
 		SnowSoilStepResult result = advance(forcing);
 		publish(result);
+		outRunDiagnostics = controller.diagnostics();
 		for (SnowSoilOutputWriter writer : activeWriters) {
 			writer.write(end, solver, result);
 		}
@@ -621,26 +673,32 @@ public class SnowSoilSolver1DMain extends HMModel {
 	}
 
 	/**
-	 * Advances the column by one step. MERGE POINT (phase 1.4): this is the
-	 * only call of {@link SnowSoilSolver#step}; the step controller (rollback
-	 * and halved substeps on non-convergence, restart snapshots) replaces its
-	 * body.
+	 * Advances the column by one step through the {@link StepController}: a
+	 * step that does not converge is rolled back and covered by halved
+	 * sub-steps (SOL-5), and the restart states go out at their interval
+	 * (ARCH-5). The solver is never stepped otherwise.
 	 */
 	private SnowSoilStepResult advance(StepForcing forcing) {
-		return solver.step(forcing);
+		return controller.advance(forcing).result();
 	}
 
 	/**
-	 * The writers of the run. MERGE POINT (phase 1.3): the NetCDF and
-	 * GEOtop-like CSV implementations of {@link SnowSoilOutputWriter} are
-	 * created here from {@link #outputPath}; until then only the writers given
-	 * in {@link #writers} are used.
+	 * The writers of the run: those given in {@link #writers}, if any;
+	 * otherwise, with an {@link #outputPath}, the NetCDF file
+	 * {@code snowsoil.nc} and the GEOtop-like CSV files in that folder; none
+	 * without it.
 	 */
 	protected List<SnowSoilOutputWriter> createWriters() {
 		if (writers != null) {
 			return new ArrayList<>(writers);
 		}
-		return new ArrayList<>();
+		List<SnowSoilOutputWriter> result = new ArrayList<>();
+		if (outputPath != null && !outputPath.isBlank()) {
+			Path folder = Path.of(outputPath);
+			result.add(new SnowSoilNetcdfWriter(folder.resolve("snowsoil.nc"), outputOptions));
+			result.add(new SnowSoilCsvWriter(folder, outputOptions));
+		}
+		return result;
 	}
 
 	/* ---------------------------------------------------------------- setup */
@@ -713,7 +771,6 @@ public class SnowSoilSolver1DMain extends HMModel {
 		bareSoilTop = EnumUtils.fromString(BareSoilTop.class, bareSoilTopType);
 
 		Map<String, String> attributes = new LinkedHashMap<>();
-		attributes.put("configuration", config.name().toLowerCase());
 		attributes.put("snowThermalConductivity", conductivity.name());
 		attributes.put("stabilityCorrection", processes.turbulence().parameters().stability().name());
 		attributes.put("maxSnowCells", Integer.toString(capacity));
@@ -735,10 +792,110 @@ public class SnowSoilSolver1DMain extends HMModel {
 			attributes.put("sha256:" + Path.of(file).getFileName(), sha256(Path.of(file)));
 		}
 		outRunHeader = new RunHeader(version(), config.name().toLowerCase(), attributes, soilDepth, soilThickness);
+		startController(attributes);
+
+		outputOptions = OutputOptions.of(eos, capacity).everySeconds(outputInterval);
+		if (isVanGenuchten(typeClosureEquation) && isVanGenuchten(typeWaterClosureEquation)) {
+			outputOptions = outputOptions.withSoilWaterContent(SoilWaterContent.vanGenuchten(soil));
+		}
 		activeWriters = createWriters();
 		for (SnowSoilOutputWriter writer : activeWriters) {
 			writer.open(outRunHeader);
 		}
+	}
+
+	/**
+	 * The step controller, new or carried on from {@link #resumeFrom}. Its
+	 * label is the hash of the configuration entries without the input hashes,
+	 * so that a run resumes only with the configuration that wrote the state,
+	 * while the forcing files may grow.
+	 */
+	private void startController(Map<String, String> attributes) throws IOException {
+		StepControlSettings settings = StepControlSettings.defaults().withMaxHalvings(maxHalvings)
+				.withOnFailure(EnumUtils.fromString(FailurePolicy.class, onNonConvergence))
+				.withRestartInterval(restartInterval);
+		StringBuilder entries = new StringBuilder("configuration=" + outRunHeader.configuration() + "\n");
+		attributes.forEach((key, value) -> {
+			if (!key.startsWith("sha256:")) {
+				entries.append(key).append('=').append(value).append('\n');
+			}
+		});
+		String label = sha256(entries.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		if (resumeFrom != null && !resumeFrom.isBlank()) {
+			try (InputStream in = Files.newInputStream(Path.of(resumeFrom))) {
+				controller = StepController.resume(solver, settings, SnowSoilRestart.read(in), label);
+			}
+			cloudiness = readForcingState(forcingStateFile(Path.of(resumeFrom)));
+		} else {
+			controller = new StepController(solver, settings, epochSeconds(inCurrentDate) - tTimeStep, label);
+		}
+		if (restartPath != null && !restartPath.isBlank() && restartInterval > 0.0) {
+			Path folder = Files.createDirectories(Path.of(restartPath));
+			controller.onRestart(state -> {
+				Path file = folder.resolve(String.format("snowsoil_restart_%d.bin", (long) state.time()));
+				try (OutputStream out = Files.newOutputStream(file)) {
+					state.write(out);
+					writeForcingState(forcingStateFile(file));
+				} catch (IOException e) {
+					throw new UncheckedIOException("cannot write the restart state " + file, e);
+				}
+			});
+		}
+	}
+
+	/**
+	 * The state of the forcing estimates kept by the component, which a resumed
+	 * run needs to go on bitwise (the running daily cloud transmissivity of
+	 * the longwave estimate), in a file beside the solver's restart state:
+	 * {@code <name>.forcing}. Format: magic, version 1, number of doubles, raw
+	 * doubles.
+	 */
+	private static Path forcingStateFile(Path restart) {
+		String name = restart.getFileName().toString();
+		int dot = name.lastIndexOf('.');
+		return restart.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + ".forcing");
+	}
+
+	private static final int FORCING_STATE_MAGIC = 0x534E4643; // "SNFC"
+
+	private void writeForcingState(Path file) throws IOException {
+		double[] state = cloudiness.state();
+		try (var out = new java.io.DataOutputStream(new java.io.BufferedOutputStream(Files.newOutputStream(file)))) {
+			out.writeInt(FORCING_STATE_MAGIC);
+			out.writeInt(1);
+			out.writeInt(state.length);
+			for (double v : state) {
+				out.writeLong(Double.doubleToRawLongBits(v));
+			}
+		}
+	}
+
+	private static DailyCloudiness.Running readForcingState(Path file) throws IOException {
+		if (!Files.exists(file)) {
+			throw new IOException("missing the forcing state " + file + " beside the restart state");
+		}
+		try (var in = new java.io.DataInputStream(new java.io.BufferedInputStream(Files.newInputStream(file)))) {
+			if (in.readInt() != FORCING_STATE_MAGIC || in.readInt() != 1) {
+				throw new IOException("not a forcing state of version 1: " + file);
+			}
+			double[] state = new double[in.readInt()];
+			for (int i = 0; i < state.length; i++) {
+				state[i] = Double.longBitsToDouble(in.readLong());
+			}
+			return DailyCloudiness.Running.of(state);
+		}
+	}
+
+	private static boolean isVanGenuchten(String[] closures) {
+		if (closures == null) {
+			return false;
+		}
+		for (String c : closures) {
+			if (c == null || !c.startsWith("Van Genuchten")) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private void takeGrid(SoilGridInputs g) {
@@ -803,6 +960,15 @@ public class SnowSoilSolver1DMain extends HMModel {
 		}
 		String v = SnowSoilSolver1DMain.class.getPackage().getImplementationVersion();
 		return v == null ? "whetgeo1d (version unknown)" : v;
+	}
+
+	/** SHA-256 of bytes, hexadecimal. */
+	private static String sha256(byte[] bytes) {
+		try {
+			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+		} catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	/** SHA-256 of a file, hexadecimal. */

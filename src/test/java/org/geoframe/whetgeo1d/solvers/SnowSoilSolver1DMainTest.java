@@ -18,10 +18,16 @@
  */
 package org.geoframe.whetgeo1d.solvers;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -61,15 +67,15 @@ public class SnowSoilSolver1DMainTest {
 		c.bottomBCType = "Bottom No Gradient";
 		c.soilWaterBottomType = "Bottom Free Drainage";
 		c.inputFiles = CASE + "/data/airTemperature.csv," + CASE + "/data/precipitation.csv";
-		c.writers = List.<SnowSoilOutputWriter>of(w);
+		c.writers = w == null ? null : List.<SnowSoilOutputWriter>of(w);
 		return c;
 	}
 
-	private static OmsTimeSeriesIteratorReader reader(String name, String end) throws Exception {
+	private static OmsTimeSeriesIteratorReader reader(String name, String start, String end) throws Exception {
 		OmsTimeSeriesIteratorReader r = new OmsTimeSeriesIteratorReader();
 		r.file = new File(CASE + "/data/" + name + ".csv").getAbsolutePath();
 		r.idfield = "ID";
-		r.tStart = START;
+		r.tStart = start;
 		r.tEnd = end;
 		r.tTimestep = 60;
 		r.fileNovalue = "-9999.0";
@@ -79,11 +85,15 @@ public class SnowSoilSolver1DMainTest {
 
 	/** The loop of the .sim: readers, then the component, until the air temperature reader stops. */
 	private static int runCase(SnowSoilSolver1DMain c, String end) throws Exception {
-		OmsTimeSeriesIteratorReader ta = reader("airTemperature", end);
-		OmsTimeSeriesIteratorReader rh = reader("relativeHumidity", end);
-		OmsTimeSeriesIteratorReader wind = reader("windSpeed", end);
-		OmsTimeSeriesIteratorReader sw = reader("shortwave", end);
-		OmsTimeSeriesIteratorReader prec = reader("precipitation", end);
+		return runCase(c, START, end);
+	}
+
+	private static int runCase(SnowSoilSolver1DMain c, String start, String end) throws Exception {
+		OmsTimeSeriesIteratorReader ta = reader("airTemperature", start, end);
+		OmsTimeSeriesIteratorReader rh = reader("relativeHumidity", start, end);
+		OmsTimeSeriesIteratorReader wind = reader("windSpeed", start, end);
+		OmsTimeSeriesIteratorReader sw = reader("shortwave", start, end);
+		OmsTimeSeriesIteratorReader prec = reader("precipitation", start, end);
 		int steps = 0;
 		while (ta.doProcess) {
 			ta.nextRecord();
@@ -151,6 +161,44 @@ public class SnowSoilSolver1DMainTest {
 		assertEquals(StandardAtmosphere.pressure(1500.0), c.outPressure, 0.0);
 		assertTrue("longwave " + c.outLongwaveIn, c.outLongwaveIn > 150.0 && c.outLongwaveIn < 400.0);
 		assertEquals(20, c.outSoilTemperature.length);
+	}
+
+	/**
+	 * The default writers under outputPath, and a run carried on from a
+	 * restart state written by the component, which ends bit for bit where the
+	 * continuous run ends (ARCH-5).
+	 */
+	@Test
+	public void writersAndRestartThroughTheComponent() throws Exception {
+		String end = "2025-12-31 00:00";
+		Path folder = Files.createTempDirectory("snowsoil-component");
+		SnowSoilSolver1DMain continuous = caseComponent("recommended", "Richards", null);
+		continuous.writers = null;
+		continuous.outputPath = folder.resolve("output").toString();
+		continuous.outputInterval = 6 * 3600;
+		continuous.restartPath = folder.resolve("restart").toString();
+		continuous.restartInterval = 20 * 86400.0;
+		runCase(continuous, end);
+		assertTrue(Files.size(folder.resolve("output/snowsoil.nc")) > 0);
+		assertTrue(Files.readAllLines(folder.resolve("output/point.csv")).size() > 100);
+		assertEquals(0, continuous.outRunDiagnostics.rejections());
+
+		Path state;
+		try (var files = Files.list(folder.resolve("restart"))) {
+			state = files.sorted().findFirst().orElseThrow();
+		}
+		long time = Long.parseLong(state.getFileName().toString().replaceAll("\\D", ""));
+		String start = LocalDateTime.ofEpochSecond(time + 3600, 0, ZoneOffset.UTC)
+				.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+		SnowSoilSolver1DMain resumed = caseComponent("recommended", "Richards", null);
+		resumed.writers = List.of();
+		resumed.resumeFrom = state.toString();
+		runCase(resumed, start, end);
+
+		assertEquals(continuous.outSnowWaterEquivalent, resumed.outSnowWaterEquivalent, 0.0);
+		assertEquals(continuous.outSurfaceTemperature, resumed.outSurfaceTemperature, 0.0);
+		assertArrayEquals(continuous.outSoilTemperature, resumed.outSoilTemperature, 0.0);
+		assertArrayEquals(continuous.outSoilSuction, resumed.outSoilSuction, 0.0);
 	}
 
 	@Test

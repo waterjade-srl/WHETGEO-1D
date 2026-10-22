@@ -453,7 +453,7 @@ public final class StepController {
 		}
 		return new StepForcing(f.surface(), f.snowfall() * fraction, f.rainfall() * fraction,
 				f.groundAlbedoVisible(), f.groundAlbedoNearInfrared(), f.bareSoilTop(), f.bottomValue(),
-				f.timeDelta() * fraction, subSinks);
+				f.timeDelta() * fraction, subSinks, f.precipitationTemperature(), f.soilWaterBottomValue());
 	}
 
 	/**

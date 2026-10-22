@@ -194,5 +194,37 @@ public final class DailyCloudiness {
 		public double value() {
 			return held;
 		}
+
+		/**
+		 * The whole state, records, running sum and held value, as raw doubles:
+		 * {held, sum, t₁, τ₁, t₂, τ₂, …}. The sum is kept as accumulated, not
+		 * recomputed, so that a run carried on from it is bitwise the continuous
+		 * one (ARCH-5).
+		 */
+		public double[] state() {
+			double[] s = new double[2 + 2 * window.size()];
+			s[0] = held;
+			s[1] = sum;
+			int k = 2;
+			for (double[] r : window) {
+				s[k++] = r[0];
+				s[k++] = r[1];
+			}
+			return s;
+		}
+
+		/** A running mean in the state given by {@link #state()}. */
+		public static Running of(double[] state) {
+			if (state.length < 2 || state.length % 2 != 0) {
+				throw new IllegalArgumentException("not a state of the running cloudiness: " + state.length + " values");
+			}
+			Running r = new Running();
+			r.held = state[0];
+			r.sum = state[1];
+			for (int k = 2; k < state.length; k += 2) {
+				r.window.addLast(new double[] { state[k], state[k + 1] });
+			}
+			return r;
+		}
 	}
 }

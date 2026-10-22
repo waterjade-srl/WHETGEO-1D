@@ -6,3 +6,6 @@ bin/
 .settings/
 build/
 /target/
+
+# outputs of the example cases
+cases/*/*/output/
