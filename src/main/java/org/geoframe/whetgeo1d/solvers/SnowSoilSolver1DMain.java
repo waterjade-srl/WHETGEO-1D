@@ -260,6 +260,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public String snowThermalConductivity = "";
 
+	@Description("Conductance of the snow faces (SNOW-3): Harmonic Mean or Geotop Mean Of Arguments; empty: GEOtop's in fidelity, harmonic in recommended.")
+	@In
+	public String faceConductance = "";
+
 	@Description("Stability correction of the turbulent fluxes over snow (Both, Unstable only, Stable only, Neutral); empty: the configuration's.")
 	@In
 	public String stabilityCorrection = "";
@@ -870,7 +874,11 @@ public class SnowSoilSolver1DMain extends HMModel {
 				? (fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991)
 				: EnumUtils.fromString(SnowThermalConductivity.class, snowThermalConductivity);
 		int capacity = maxSnowCells > 0 ? maxSnowCells : (fidelity ? 10 : 11);
-		SnowHeatProperties heat = new SnowHeatProperties(eos, conductivity, capacity);
+		SnowHeatProperties.FaceConductance faces = faceConductance == null || faceConductance.isBlank()
+				? (fidelity ? SnowHeatProperties.FaceConductance.GEOTOP_MEAN_OF_ARGUMENTS
+						: SnowHeatProperties.FaceConductance.HARMONIC_MEAN)
+				: EnumUtils.fromString(SnowHeatProperties.FaceConductance.class, faceConductance);
+		SnowHeatProperties heat = new SnowHeatProperties(eos, conductivity, capacity, faces);
 		bottomType = DiffusionBoundaryConditionType.fromString(bottomBCType);
 		if (bottomType.name().startsWith("TOP")) {
 			throw new IllegalArgumentException("bottomBCType must be a bottom condition, got " + bottomBCType);
@@ -893,6 +901,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 
 		Map<String, String> attributes = new LinkedHashMap<>();
 		attributes.put("snowThermalConductivity", conductivity.name());
+		attributes.put("faceConductance", faces.name());
 		attributes.put("stabilityCorrection", processes.turbulence().parameters().stability().name());
 		attributes.put("maxSnowCells", Integer.toString(capacity));
 		attributes.put("alphaSnow", Double.toString(alphaSnow));

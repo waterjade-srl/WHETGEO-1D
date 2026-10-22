@@ -18,10 +18,26 @@
  */
 package org.geoframe.whetgeo1d.core.snowsoil;
 
+import static org.geoframe.whetgeo1d.snow.SnowConstants.WATER_DENSITY;
+
+import static org.geoframe.whetgeo1d.snow.SnowConstants.ICE_DENSITY;
+
+import static org.geoframe.whetgeo1d.snow.SnowConstants.CONDUCTIVITY_WATER;
+
+import static org.geoframe.whetgeo1d.snow.SnowConstants.CONDUCTIVITY_ICE;
+
+import static org.geoframe.whetgeo1d.snow.SnowConstants.CONDUCTIVITY_AIR;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+
+import org.geoframe.whetgeo1d.snow.SnowThermalConductivity;
+
+import org.geoframe.whetgeo1d.core.utils.EnumUtils;
+
+import org.geoframe.whetgeo1d.core.equationstate.EquationStateFactory.StateEquationModel;
 
 import org.geoframe.closureequation.closureequation.Parameters;
 import org.geoframe.closureequation.equationstate.EquationState;
@@ -56,8 +72,10 @@ import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
  * <li>Fixed capacity and active window ({@link SnowSoilColumn}): nothing is
  * reallocated when the snow cells change in number.</li>
  * <li>Snow–snow and snow–soil faces: thickness-weighted harmonic mean (§4.1),
- * the series conductance of the two half cells. Soil–soil faces keep the
- * model configured for the soil.</li>
+ * the series conductance of the two half cells, or in the fidelity
+ * configuration GEOtop's mean of the arguments
+ * ({@link SnowHeatProperties.FaceConductance}, SNOW-3). Soil–soil faces keep
+ * the model configured for the soil.</li>
  * <li>Top face over snow: the conductivity of the top snow cell at its own
  * temperature. WHETGEO evaluates the soil at the boundary temperature; for
  * snow that would turn the half cell into water whenever the surface is
@@ -110,6 +128,10 @@ public final class SnowSoilHeatDriver {
 	private final SnowInternalEnergy snowClosure;
 	private final InterfaceConductivity snowFaceConductivity = new InterfaceConductivityWeightedHarmonicMean();
 	private final SingleCellHeatSolver singleCellSolver = new SingleCellHeatSolver();
+	/** Liquid and ice of the soil cells, for GEOtop's snow–soil face (fidelity); null without soil. */
+	private final IceAwareRetention retention;
+	/** Which equation-state ids of the soil freeze. */
+	private final boolean[] freezingSoil;
 	/** Active-cell index of the largest residual ratio of the last check, -1 before any step. */
 	private int worstCell = -1;
 
@@ -143,8 +165,16 @@ public final class SnowSoilHeatDriver {
 					soil.interfaceThermalConductivityModel(), DiffusionBoundaryConditionType.TOP_DIRICHLET,
 					bottomType, column.variables(), column.geometry(), soil.parameters());
 			closures.addAll(soilQuantities.getInternalEnergyStateEquation());
+			retention = new IceAwareRetention(soil.parameters());
+			freezingSoil = new boolean[soil.typeEquationState().length];
+			for (int k = 0; k < freezingSoil.length; k++) {
+				freezingSoil[k] = EnumUtils.fromString(StateEquationModel.class,
+						soil.typeEquationState()[k]) == StateEquationModel.FREEZING_SOIL_INTERNAL_ENERGY;
+			}
 		} else {
 			soilQuantities = null;
+			retention = null;
+			freezingSoil = new boolean[0];
 		}
 		snowClosure = new SnowInternalEnergy(null, column.variables(), new SnowEquationOfState[] { equationOfState },
 				column.totalMass());
@@ -537,9 +567,11 @@ public final class SnowSoilHeatDriver {
 		for (int i = nSoil; i < n; i++) {
 			variables.lambdas[i] = snowConductivity(variables.temperatures[i], column.totalMass()[i], thickness[i]);
 		}
+		boolean geotop = snowProperties.faceConductance() == SnowHeatProperties.FaceConductance.GEOTOP_MEAN_OF_ARGUMENTS;
 		for (int i = Math.max(nSoil, 1); i < n; i++) {
-			variables.lambdasInterface[i] = snowFaceConductivity.compute(variables.lambdas[i - 1], variables.lambdas[i],
-					thickness[i - 1], thickness[i]);
+			variables.lambdasInterface[i] = geotop ? geotopFaceConductivity(i, nSoil)
+					: snowFaceConductivity.compute(variables.lambdas[i - 1], variables.lambdas[i], thickness[i - 1],
+							thickness[i]);
 		}
 		if (nSoil == 0) {
 			variables.lambdasInterface[0] = bottomType == DiffusionBoundaryConditionType.BOTTOM_DIRICHLET
@@ -547,6 +579,71 @@ public final class SnowSoilHeatDriver {
 					: UNDEFINED;
 		}
 		variables.lambdasInterface[n] = variables.lambdas[n - 1];
+	}
+
+	/**
+	 * GEOtop's conductivity of the face below cell i (fidelity, SNOW-3): the
+	 * arguments of the two cells averaged with {@code Arithmetic_Mean}, each
+	 * weighted by the other cell's thickness, then the conductivity of the
+	 * means; Cosenza's soil formula when the lower cell is soil
+	 * ({@code energy.balance.cc:1548-1578, 2743-2765}). GEOtop's constants:
+	 * k<sub>w</sub> = 0.567, k<sub>i</sub> = 2.29, k<sub>a</sub> = 0.023
+	 * W m-1 K-1, ρ<sub>i</sub> = 917 kg m-3.
+	 */
+	private double geotopFaceConductivity(int i, int nSoil) {
+		double[] thickness = column.geometry().controlVolume;
+		return geotopFaceConductivity(faceArguments(i - 1, nSoil), faceArguments(i, nSoil), thickness[i - 1],
+				thickness[i], i - 1 >= nSoil ? snowProperties.conductivity() : null);
+	}
+
+	/**
+	 * GEOtop's face conductivity from the arguments of the two cells.
+	 *
+	 * @param lower   θ<sub>w</sub>, θ<sub>i</sub>, θ<sub>sat</sub>, k<sub>solid</sub>
+	 *                of the lower cell
+	 * @param upper   the same of the upper cell
+	 * @param dLower  thickness of the lower cell [m]
+	 * @param dUpper  thickness of the upper cell [m]
+	 * @param snowLaw the snow law when the lower cell is snow; null: the lower
+	 *                cell is soil (Cosenza's soil formula)
+	 */
+	static double geotopFaceConductivity(double[] lower, double[] upper, double dLower, double dUpper,
+			SnowThermalConductivity snowLaw) {
+		double[] mean = new double[4];
+		for (int k = 0; k < 4; k++) {
+			mean[k] = (dLower * upper[k] + dUpper * lower[k]) / (dLower + dUpper);
+		}
+		if (snowLaw != null) {
+			return snowLaw.conductivity(mean[0], mean[1]);
+		}
+		double root = (1.0 - mean[2]) * Math.sqrt(mean[3]) + mean[0] * Math.sqrt(CONDUCTIVITY_WATER)
+				+ mean[1] * Math.sqrt(CONDUCTIVITY_ICE) + (mean[2] - mean[0] - mean[1]) * Math.sqrt(CONDUCTIVITY_AIR);
+		return root * root;
+	}
+
+	/** θ<sub>w</sub>, θ<sub>i</sub>, θ<sub>sat</sub>, k<sub>solid</sub> of a cell at its current temperature. */
+	private double[] faceArguments(int i, int nSoil) {
+		WGProblemQuantities variables = column.variables();
+		double t = variables.temperatures[i];
+		if (i >= nSoil) {
+			double total = column.totalMass()[i];
+			double thickness = column.geometry().controlVolume[i];
+			double liquid = total * equationOfState.liquidFraction(t);
+			return new double[] { liquid / (WATER_DENSITY * thickness), (total - liquid) / (ICE_DENSITY * thickness),
+					1.0, 0.0 };
+		}
+		int id = variables.parameterID[i];
+		double psi = variables.waterSuctions[i];
+		double liquid;
+		double ice;
+		if (freezingSoil[variables.equationStateID[i]]) {
+			liquid = retention.freezingLiquid(psi, t, id);
+			ice = retention.freezingIce(psi, t, id);
+		} else {
+			liquid = retention.liquid(psi, 0.0, id);
+			ice = 0.0;
+		}
+		return new double[] { liquid, ice, soilParameters.thetaS[id], soilParameters.thermalConductivitySoilParticles[id] };
 	}
 
 	/** Conductivity of a snow cell with its phases at equilibrium at T. */
