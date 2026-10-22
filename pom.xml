@@ -97,6 +97,51 @@
 	</build>
 
 	<profiles>
+		<!-- Code version for the run header of the snow+soil component (VAL-7):
+		     the output of `git describe` written next to the classes at build
+		     time; only in a git checkout (.git is a folder, or a file in a
+		     worktree). Elsewhere the component falls back to the jar's version. -->
+		<profile>
+			<id>git-version</id>
+			<activation>
+				<file>
+					<exists>${basedir}/.git</exists>
+				</file>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>exec-maven-plugin</artifactId>
+						<version>3.5.0</version>
+						<executions>
+							<execution>
+								<id>git-describe</id>
+								<phase>generate-resources</phase>
+								<goals>
+									<goal>exec</goal>
+								</goals>
+								<configuration>
+									<executable>git</executable>
+									<workingDirectory>${basedir}</workingDirectory>
+									<arguments>
+										<argument>describe</argument>
+										<argument>--always</argument>
+										<argument>--dirty</argument>
+										<argument>--tags</argument>
+									</arguments>
+									<outputFile>${project.build.outputDirectory}/whetgeo1d-git-version.txt</outputFile>
+									<successCodes>
+										<successCode>0</successCode>
+										<successCode>128</successCode>
+									</successCodes>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
 		<profile>
 			<id>release</id>
 			<activation>

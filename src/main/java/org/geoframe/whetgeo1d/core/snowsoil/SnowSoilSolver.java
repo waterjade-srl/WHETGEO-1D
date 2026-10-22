@@ -361,7 +361,20 @@ public final class SnowSoilSolver {
 		double albedo = Double.NaN;
 		TopBoundary top;
 		double pendingApplied = 0.0;
-		if (snowAtStart) {
+		boolean imposedSnowTop = snowAtStart && forcing.snowTop() != null;
+		if (imposedSnowTop) {
+			// COL-6: an imposed condition over snow in place of the surface balance
+			startTemperature = eos.temperature(start.get(start.size() - 1));
+			surfaceAge = SurfaceSnowAge.advance(surfaceAge, forcing.snowfall(), startTemperature, dt,
+					processes.restoringSnowfall());
+			if (forcing.snowTop() instanceof TopBoundary.SurfaceFlux flux) {
+				pendingApplied = pendingSurfaceEnergy;
+				top = new TopBoundary.SurfaceFlux(flux.flux() + pendingApplied / dt, flux.fluxDerivative());
+			} else {
+				double imposed = ((TopBoundary.SurfaceTemperature) forcing.snowTop()).temperature();
+				top = new TopBoundary.SurfaceTemperature(Math.min(imposed, MELTING_TEMPERATURE));
+			}
+		} else if (snowAtStart) {
 			startTemperature = eos.temperature(start.get(start.size() - 1));
 			surfaceAge = SurfaceSnowAge.advance(surfaceAge, forcing.snowfall(), startTemperature, dt,
 					processes.restoringSnowfall());
@@ -388,7 +401,7 @@ public final class SnowSoilSolver {
 		double[] soilStart = heat.soilTemperatures();
 		HeatStepResult heatStep = heat.step(start, top, forcing.bottomValue(), dt);
 		int sweeps = 1;
-		boolean surfaceConverged = !snowAtStart || processes.surfaceCoupling().maxSweeps() == 1;
+		boolean surfaceConverged = !snowAtStart || imposedSnowTop || processes.surfaceCoupling().maxSweeps() == 1;
 		double linearisedAt = startTemperature;
 		while (!surfaceConverged && sweeps < processes.surfaceCoupling().maxSweeps()) {
 			double[] temperatures = heatStep.temperatures();
@@ -413,7 +426,7 @@ public final class SnowSoilSolver {
 					.surfaceCoupling().temperatureTolerance();
 		}
 		double surfaceChange = Double.NaN;
-		if (snowAtStart) {
+		if (snowAtStart && !imposedSnowTop) {
 			double[] temperatures = heatStep.temperatures();
 			surfaceChange = Math.abs(temperatures[temperatures.length - 1] - linearisedAt);
 		}
@@ -432,7 +445,10 @@ public final class SnowSoilSolver {
 		double toSoilMass = 0.0;
 		double toSoilEnergy = 0.0;
 		double phaseMismatch = 0.0;
-		if (snowAtStart) {
+		if (imposedSnowTop) {
+			double[] temperatures = heatStep.temperatures();
+			surfaceTemperature = temperatures[temperatures.length - 1];
+		} else if (snowAtStart) {
 			double[] temperatures = heatStep.temperatures();
 			surfaceTemperature = temperatures[temperatures.length - 1];
 			surface = balance.evaluate(surfaceTemperature);

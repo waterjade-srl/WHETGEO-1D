@@ -39,6 +39,19 @@ public final class StepNotConvergedException extends RuntimeException {
 		this.rejections = List.copyOf(rejections);
 	}
 
+	/**
+	 * The same failure with a message that adds what the caller did about it,
+	 * e.g. where it saved the last accepted state.
+	 *
+	 * @param message the full message
+	 * @param cause   the exception thrown by the step controller
+	 */
+	public StepNotConvergedException(String message, StepNotConvergedException cause) {
+		super(message, cause);
+		this.failure = cause.failure;
+		this.rejections = cause.rejections;
+	}
+
 	/** The rejection at the finest sub-step, the one that stopped the run. */
 	public StepRejection failure() {
 		return failure;
