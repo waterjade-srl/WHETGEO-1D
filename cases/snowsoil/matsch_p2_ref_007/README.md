@@ -94,21 +94,22 @@ GEOtop's `soilTz` here is its `SoilAveragedTempProfileFile`, the soil temperatur
 
 **Within the tolerances (both runs):**
 
-- SWE: RMSE 0.02 mm, peak −8 % (−9 % with the balance);
+- SWE: RMSE 0.02 mm, peak −8 % (imposed `Tsurface`) or −9 % (bare-soil balance);
 - HS: RMSE 1.7 mm;
 - LWnet with snow;
-- soil temperature at every depth:
-  - imposed `Tsurface`: RMSE ≤ 0.09 K;
-  - bare-soil energy balance: RMSE ≤ 0.14 K;
-  - |bias| ≤ 0.04 K in both;
+- soil temperature at every depth: RMSE ≤ 0.09 K with `Tsurface` imposed, ≤ 0.14 K with the balance; |bias| ≤ 0.04 K;
 - maximum frost depth: same cell, 15 mm.
 
-**Beyond the tolerances (both runs):**
+With the bare-soil balance, also melt (−10 %) and θw / θi of the top cell. GEOtop's face conductivity in Richards is now the fidelity default (below).
+
+**Beyond the tolerances:**
 
 - HS max, by 20 mm: GEOtop keeps the thickness of a melting single layer;
-- melt −10/−11 % and runoff −21 %;
+- runoff −21 %; melt −10 % with `Tsurface` imposed;
 - Ts, SWnet, H and LE with snow: thin snow is not ported;
-- θw and θi of the top cell. On frosty nights the port pulls more water up into the top cell than GEOtop (+2.1 against +1.4 mm in the top three cells, night of 14–15 October). The top cell saturates (θi 0.43 against 0.38), while the liquid content at a given temperature is the same. The cause lies in the frozen-soil hydraulics (cryosuction, ice impedance, storage of a saturated frozen cell) and is still to be isolated.
+- with `Tsurface` imposed only, θw / θi of the top cell (θi max off by 0.020, θw RMSE 0.033), driven by the imposed hourly mean.
+
+**Water drawn into a frozen cell (fixed).** The first runs used WHETGEO's interface conductivity `max`, which gives a frozen cell the conductivity of the unfrozen cell below it. On frosty nights the top cell therefore saturated: θi 0.43 against GEOtop's 0.38, with +2.1 mm against +1.4 mm in the top three cells. GEOtop takes the conductivity of the upwind cell and caps it with the smaller conductivity of the two cells at saturation with their ice (`water.balance.cc:1007-1047`), including a correction for the viscosity of water (`pedo.funct.h:145-171`). This is now the default of the fidelity configuration (`interfaceHydraulicConductivityModel = GEOtop`), checked against GEOtop's formulas in `FrozenFaceConductivityTest`. Matsch now gains +1.35 against +1.37 mm, with θi 0.374 / 0.306 against 0.376 / 0.310.
 
 **The bare-soil energy balance** (`run.sh seb`) reproduces GEOtop's fluxes without snow over 742 hours:
 
