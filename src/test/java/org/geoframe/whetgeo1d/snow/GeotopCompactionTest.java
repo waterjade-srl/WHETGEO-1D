@@ -131,13 +131,32 @@ public class GeotopCompactionTest {
 
 	@Test
 	public void stopsAtTheMaximumIceFraction() {
-		// 600 kg m-3 of ice, very long step: compaction stops at 0.7 · 917 = 641.9 kg m-3
+		// recommended, one density: 600 kg m-3 of ice, very long step, compaction stops at 0.7 · 917 = 641.9 kg m-3
+		GeotopCompaction recommended = new GeotopCompaction(GeotopCompaction.Parameters.recommended(), EOS);
 		SnowCell cell = cold(60.0, 0.1, -1.0);
-		SnowCell out = COMPACTION.compact(List.of(cell, cold(1000.0, 2.0, -1.0)), 1e9, 0.0).get(0);
+		SnowCell out = recommended.compact(List.of(cell, cold(1000.0, 2.0, -1.0)), 1e9, 0.0).get(0);
 		assertEquals(out.iceMass() / (0.7 * ICE_DENSITY), out.thickness(), 1e-15);
 		// a cell already beyond the limit is left as it is, never thickened
 		SnowCell dense = cold(70.0, 0.1, -1.0);
-		assertSame(dense, COMPACTION.compact(List.of(dense), 1e9, 0.0).get(0));
+		assertSame(dense, recommended.compact(List.of(dense), 1e9, 0.0).get(0));
+		List<SnowCell> column = List.of(dense);
+		assertSame(column, recommended.capDensity(column));
+	}
+
+	@Test
+	public void geotopPorosityCapAtTheWaterDensity() {
+		// fidelity (snow.cc:1104-1110): the overshoot of a long step stops at w_i / (rho_w D) = 0.7, 700 kg m-3
+		SnowCell cell = cold(60.0, 0.1, -1.0);
+		SnowCell out = COMPACTION.compact(List.of(cell, cold(1000.0, 2.0, -1.0)), 1e9, 0.0).get(0);
+		assertEquals(out.iceMass() / (0.7 * WATER_DENSITY), out.thickness(), 1e-15);
+		// a cell denser than 700 kg m-3 of ice (refrozen) is reset to the cap, thicker
+		SnowCell dense = cold(80.0, 0.1, -1.0);
+		SnowCell capped = COMPACTION.capDensity(List.of(dense)).get(0);
+		assertEquals(dense.iceMass() / (0.7 * WATER_DENSITY), capped.thickness(), 1e-15);
+		assertEquals(dense.internalEnergy(), capped.internalEnergy(), 0.0);
+		// cells at or below the minimum ice (0.5 kg m-2) are left alone, as GEOtop's simpl_snow
+		SnowCell thin = cold(0.5, 0.0005, -1.0);
+		assertSame(thin, COMPACTION.capDensity(List.of(thin)).get(0));
 	}
 
 	@Test

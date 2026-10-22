@@ -45,7 +45,11 @@ import java.util.List;
  * <p>
  * Departures from GEOtop: GEOtop applies the rule only to cells holding more
  * than {@code simpl_snow · max_weq_snow} (0.5 kg m-2) of ice, together with the
- * compaction; here it applies to every cell that still holds some ice. A cell
+ * compaction; here it applies to every cell that still holds some ice, in both
+ * configurations (SNOW-6). The visible consequence: a thin melting pack, below
+ * 0.5 kg m-2 of ice, keeps its thickness in GEOtop while its SWE goes to zero
+ * (Matsch_P2_Ref_007, 2 November 2009: 23 mm of depth with 0.01 mm of SWE);
+ * this is not physics and is deliberately not reproduced. A cell
  * left with no ice keeps its thickness, since a cell cannot have zero
  * thickness: the restratification removes it.
  */

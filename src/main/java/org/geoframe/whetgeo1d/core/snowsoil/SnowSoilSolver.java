@@ -472,6 +472,8 @@ public final class SnowSoilSolver {
 		// 5: compaction and melt shrinkage, against the ice at the start of the step
 		cells = processes.compaction().compact(cells, dt, processes.slopeAngle());
 		cells = MeltShrinkage.apply(start.subList(0, cells.size()), cells);
+		// GEOtop's porosity cap after the shrinkage (fidelity; nothing in the recommended configuration)
+		cells = processes.compaction().capDensity(cells);
 
 		// 6: percolation, with the rain entering the top cell
 		double rainEnergy = 0.0;

@@ -35,4 +35,17 @@ public interface CompactionModel {
 	 * @return the compacted column, a new list of the same size
 	 */
 	List<SnowCell> compact(List<SnowCell> cells, double timeDelta, double slopeAngle);
+
+	/**
+	 * A limit on the density of the cells applied after the melt shrinkage of
+	 * the step, where a model has one (GEOtop's porosity cap,
+	 * {@link GeotopCompaction}); by default none. Unlike {@link #compact} it may
+	 * thicken a cell.
+	 *
+	 * @param cells the column, index 0 at the bottom
+	 * @return the column, a new list of the same size or the same list
+	 */
+	default List<SnowCell> capDensity(List<SnowCell> cells) {
+		return cells;
+	}
 }

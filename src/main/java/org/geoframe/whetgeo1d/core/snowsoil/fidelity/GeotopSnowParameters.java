@@ -137,7 +137,7 @@ public final class GeotopSnowParameters {
 		GeotopCompaction compaction = new GeotopCompaction(new GeotopCompaction.Parameters(
 				get("MaxSnowPorosity", c.maxIceVolumeFraction()), get("DrySnowDefRate", c.dryDeformationRate()),
 				get("SnowDensityCutoff", c.densityCutoff()), get("WetSnowDefRate", c.wetDeformationRate()),
-				get("SnowViscosity", c.viscosity()), THIN_FRACTION * cellIce), eos);
+				get("SnowViscosity", c.viscosity()), THIN_FRACTION * cellIce, c.geotopCap()), eos);
 		LiquidWaterPercolation.Parameters w = LiquidWaterPercolation.Parameters.geotop();
 		LiquidWaterPercolation percolation = new LiquidWaterPercolation(new LiquidWaterPercolation.Parameters(
 				get("IrriducibleWatSatSnow", w.irreducibleSaturation()), w.rateLimited(), THIN_FRACTION * cellIce),
