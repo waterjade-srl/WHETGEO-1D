@@ -91,13 +91,14 @@ public final class GeotopForcingFiles {
 	 * {@code clearSkyEmissivity}, {@code firstStepEnd}
 	 * and {@code lastStepEnd} (UTC, yyyy-MM-dd HH:mm), {@code timeStep} [s],
 	 * {@code outputFolder}, {@code stationID}, {@code geotopPointFile}
-	 * (optional: the fallbacks).
+	 * (optional: the fallbacks); optional column headers, see
+	 * {@link #headers(Properties)}.
 	 */
 	public static void run(Properties p, Path base) throws IOException {
 		GeotopMeteo meteo = GeotopMeteo.read(base.resolve(p.getProperty("meteoFile")), p.getProperty("dateHeader"),
 				p.getProperty("julianDayHeader"));
 		String pointHorizon = p.getProperty("pointHorizonFile", "");
-		GeotopForcing forcing = new GeotopForcing(meteo, GeotopForcing.Headers.geotop(), number(p, "latitude"),
+		GeotopForcing forcing = new GeotopForcing(meteo, headers(p), number(p, "latitude"),
 				number(p, "longitude"), number(p, "standardTime"), number(p, "elevation"), number(p, "slope"),
 				number(p, "aspect"), Horizon.read(base.resolve(p.getProperty("stationHorizonFile"))),
 				pointHorizon.isBlank() ? Horizon.flat() : Horizon.read(base.resolve(pointHorizon)),
@@ -165,6 +166,23 @@ public final class GeotopForcingFiles {
 			result.put(t, new double[] { Double.parseDouble(r[ts].trim()), Double.parseDouble(r[ev].trim()) });
 		}
 		return result;
+	}
+
+	/**
+	 * The column headers: GEOtop's defaults, or the optional keys
+	 * {@code precipitationHeader}, {@code windSpeedHeader},
+	 * {@code relativeHumidityHeader}, {@code airTemperatureHeader},
+	 * {@code shortwaveGlobalHeader} and {@code longwaveInHeader} (the measured
+	 * incoming longwave; absent or empty: estimated).
+	 */
+	static GeotopForcing.Headers headers(Properties p) {
+		GeotopForcing.Headers d = GeotopForcing.Headers.geotop();
+		String lw = p.getProperty("longwaveInHeader", "").trim();
+		return new GeotopForcing.Headers(p.getProperty("precipitationHeader", d.precipitation()).trim(),
+				p.getProperty("windSpeedHeader", d.windSpeed()).trim(),
+				p.getProperty("relativeHumidityHeader", d.relativeHumidity()).trim(),
+				p.getProperty("airTemperatureHeader", d.airTemperature()).trim(),
+				p.getProperty("shortwaveGlobalHeader", d.shortwaveGlobal()).trim(), lw.isEmpty() ? null : lw);
 	}
 
 	private static void add(Map<String, List<double[]>> series, String name, long t, double v) {

@@ -1,0 +1,5 @@
+data/
+output/
+.cp.txt
+geotop/*/meteo0001.txt
+geotop/*/reference.csv

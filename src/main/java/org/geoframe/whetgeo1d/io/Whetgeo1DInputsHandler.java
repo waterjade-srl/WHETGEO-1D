@@ -557,21 +557,24 @@ public class Whetgeo1DInputsHandler implements AutoCloseable {
 			return null;
 		});
 
-		double etaTop = icPoints.get(0)[0];
-		double etaBot = icPoints.get(1)[0];
-		double psiTop = icPoints.get(0)[1];
-		double psiBot = icPoints.get(1)[1];
-		double tTop = icPoints.get(0)[2];
-		double tBot = icPoints.get(1)[2];
-
 		psi = new double[KMAX];
 		temperatureIC = new double[KMAX];
 
-		// TODO check this is correct: linear interpolation in eta coordinate?
+		// Piecewise linear interpolation in eta through all the IC points; outside
+		// them, the first or last segment is extended. With two points this is the
+		// single linear profile, computed with the same operations as before. (The
+		// previous code used only the first two points and extrapolated them over
+		// the whole column, which silently ignored every further IC point.)
 		for (int i = 0; i < KMAX; i++) {
+			int j = 0;
+			while (j < icPoints.size() - 2 && eta[i] < icPoints.get(j + 1)[0]) {
+				j++;
+			}
+			double etaTop = icPoints.get(j)[0];
+			double etaBot = icPoints.get(j + 1)[0];
 			double t = (eta[i] - etaTop) / (etaBot - etaTop);
-			psi[i] = psiTop + t * (psiBot - psiTop);
-			temperatureIC[i] = tTop + t * (tBot - tTop);
+			psi[i] = icPoints.get(j)[1] + t * (icPoints.get(j + 1)[1] - icPoints.get(j)[1]);
+			temperatureIC[i] = icPoints.get(j)[2] + t * (icPoints.get(j + 1)[2] - icPoints.get(j)[2]);
 		}
 	}
 

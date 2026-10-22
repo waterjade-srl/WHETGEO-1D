@@ -66,8 +66,9 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
  * column ({@code input.cc:405-408}): a column of -9999 leaves it undefined for
  * the whole run, an error of the input that the corrected reference
  * removes;</li>
- * <li>incoming longwave: V ε<sub>a</sub> σ T<sub>a</sub>⁴ with the case's
- * clear-sky emissivity ({@link IncomingLongwave});</li>
+ * <li>incoming longwave: the measured column where the file has one
+ * ({@link Headers#longwaveIn()}), otherwise V ε<sub>a</sub> σ T<sub>a</sub>⁴
+ * with the case's clear-sky emissivity ({@link IncomingLongwave});</li>
  * <li>shortwave on the slope: {@link SlopeShortwave}.</li>
  * </ul>
  *
@@ -81,9 +82,22 @@ public final class GeotopForcing {
 	public static final double MINIMUM_RELATIVE_HUMIDITY = 10.0;
 	private static final double GEOTOP_SEA_LEVEL_PRESSURE = 101325.0;
 
-	/** Column headers of the meteorological file, as in geotop.inpts. */
+	/**
+	 * Column headers of the meteorological file, as in geotop.inpts.
+	 *
+	 * @param longwaveIn header of the measured incoming longwave
+	 *                   ({@code HeaderLWin}); null for none. Where the column
+	 *                   has a value GEOtop uses it as it is, in place of its
+	 *                   estimate ({@code energy.balance.cc:603-606})
+	 */
 	public record Headers(String precipitation, String windSpeed, String relativeHumidity, String airTemperature,
-			String shortwaveGlobal) {
+			String shortwaveGlobal, String longwaveIn) {
+
+		/** Without measured longwave. */
+		public Headers(String precipitation, String windSpeed, String relativeHumidity, String airTemperature,
+				String shortwaveGlobal) {
+			this(precipitation, windSpeed, relativeHumidity, airTemperature, shortwaveGlobal, null);
+		}
 
 		/** GEOtop's own default names. */
 		public static Headers geotop() {
@@ -235,7 +249,10 @@ public final class GeotopForcing {
 			stepTau = averaged;
 		}
 		SlopeShortwave.Result sw = shortwave.step(dayBegin, dayEnd, stepTau, pressure, humidity, taK);
-		double lw = IncomingLongwave.of(emissivity, taK, humidity, pressure, averaged, skyViewFactor);
+		double lw = headers.longwaveIn() == null ? Double.NaN : meteo.stepMean(headers.longwaveIn(), begin, end);
+		if (Double.isNaN(lw)) {
+			lw = IncomingLongwave.of(emissivity, taK, humidity, pressure, averaged, skyViewFactor);
+		}
 		return new Step(ta, rh, wind, pressure, split.rain(), split.snow(), global, sw.beam(), sw.diffuse(),
 				sw.cosIncidence(), lw, stepTau, averaged);
 	}
