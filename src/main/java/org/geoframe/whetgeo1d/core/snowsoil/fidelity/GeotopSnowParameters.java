@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.geoframe.whetgeo1d.core.snowsoil.SnowProcesses;
+import org.geoframe.whetgeo1d.core.snowsoil.ThinSnow;
 import org.geoframe.whetgeo1d.snow.GeotopCompaction;
 import org.geoframe.whetgeo1d.snow.LiquidWaterPercolation;
 import org.geoframe.whetgeo1d.snow.MassCriterionRestratification;
@@ -55,6 +56,10 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceEnergyBalance;
  * the thin-cell thresholds of compaction and percolation, 0.1 W<sub>c</sub>,
  * follow W<sub>c</sub></td></tr>
  * <tr><td>PointSlope [deg]</td><td>slope of the snowpack processes</td></tr>
+ * <tr><td>SoilRoughness, ThresSnowSoilRough [mm], SoilEmissiv</td><td>{@link ThinSnow}:
+ * roughness and emissivity of the surface under a thin pack;
+ * {@code ThresSnowSoilRough} defaults to {@code SoilRoughness}, as in GEOtop
+ * ({@code parameters.cc:1246-1248})</td></tr>
  * </table>
  */
 public final class GeotopSnowParameters {
@@ -62,7 +67,8 @@ public final class GeotopSnowParameters {
 	private static final Set<String> KEYWORDS = Set.of("FreshSnowReflVis", "FreshSnowReflNIR", "SnowAgingCoeffVis",
 			"SnowAgingCoeffNIR", "AlbExtParSnow", "IrriducibleWatSatSnow", "SnowEmissiv", "SnowRoughness",
 			"MaxSnowPorosity", "DrySnowDefRate", "SnowDensityCutoff", "WetSnowDefRate", "SnowViscosity",
-			"MaxWaterEqSnowLayerContent", "SWEbottom", "SWEtop", "MaxSnowLayersMiddle", "PointSlope");
+			"MaxWaterEqSnowLayerContent", "SWEbottom", "SWEtop", "MaxSnowLayersMiddle", "PointSlope",
+			"SoilRoughness", "ThresSnowSoilRough", "SoilEmissiv");
 	/** GEOtop's {@code simpl_snow}: cells below this fraction of W_c are thin. */
 	private static final double THIN_FRACTION = 0.1;
 
@@ -137,7 +143,13 @@ public final class GeotopSnowParameters {
 				get("IrriducibleWatSatSnow", w.irreducibleSaturation()), w.rateLimited(), THIN_FRACTION * cellIce),
 				eos);
 		double slope = values.containsKey("PointSlope") ? Math.toRadians(values.get("PointSlope")) : p.slopeAngle();
+		ThinSnow thin = p.thinSnow();
+		double soilRoughness = values.containsKey("SoilRoughness") ? 1e-3 * values.get("SoilRoughness")
+				: thin.soilRoughness();
+		double threshold = values.containsKey("ThresSnowSoilRough") ? 1e-3 * values.get("ThresSnowSoilRough")
+				: values.containsKey("SoilRoughness") ? soilRoughness : thin.roughnessThreshold();
+		thin = thin.with(soilRoughness, threshold, get("SoilEmissiv", thin.soilEmissivity()));
 		return new SnowProcesses(eos, balance, turbulence, albedo, p.restoringSnowfall(), compaction, slope,
-				percolation, p.sublimationThickness(), restratification, p.precipitation(), p.surfaceCoupling());
+				percolation, p.sublimationThickness(), restratification, p.precipitation(), p.surfaceCoupling(), thin);
 	}
 }

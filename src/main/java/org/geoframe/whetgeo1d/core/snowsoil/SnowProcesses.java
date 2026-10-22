@@ -51,12 +51,24 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceEnergyBalance;
  * @param restratification      merge and split of the cells
  * @param precipitation         temperature of rain and fresh snow (A18)
  * @param surfaceCoupling       how the surface balance enters the heat step
+ * @param thinSnow              GEOtop's soil roughness and emissivity under a
+ *                              thin pack ({@link ThinSnow}); fidelity only
  */
 public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
 		MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
 		double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
 		RestratificationPolicy restratification, PrecipitationTemperature precipitation,
-		SurfaceCoupling surfaceCoupling) {
+		SurfaceCoupling surfaceCoupling, ThinSnow thinSnow) {
+
+	/** Processes without a thin-snow regime. */
+	public SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
+			MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
+			double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
+			RestratificationPolicy restratification, PrecipitationTemperature precipitation,
+			SurfaceCoupling surfaceCoupling) {
+		this(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction, slopeAngle,
+				percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, ThinSnow.none());
+	}
 
 	public SnowProcesses {
 		Objects.requireNonNull(equationOfState, "equationOfState");
@@ -69,6 +81,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 		Objects.requireNonNull(restratification, "restratification");
 		Objects.requireNonNull(precipitation, "precipitation");
 		Objects.requireNonNull(surfaceCoupling, "surfaceCoupling");
+		Objects.requireNonNull(thinSnow, "thinSnow");
 		if (!(restoringSnowfall > 0.0)) {
 			throw new IllegalArgumentException("restoringSnowfall must be positive, got " + restoringSnowfall);
 		}
@@ -82,7 +95,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 	 * turbulence, albedo, compaction, rate-limited percolation, mass criterion
 	 * with no cap, sublimation at constant thickness, precipitation as GEOtop;
 	 * flat ground; surface balance implicit in the surface temperature, as
-	 * GEOtop solves it.
+	 * GEOtop solves it; GEOtop's thin-snow regime ({@link ThinSnow#geotop()}).
 	 *
 	 * @param windHeight        height of the wind measurement [m]
 	 * @param temperatureHeight height of the air temperature measurement [m]
@@ -95,7 +108,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				new LiquidWaterPercolation(LiquidWaterPercolation.Parameters.geotop(), eos),
 				SnowSublimation.ThicknessRule.UNCHANGED,
 				new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
-				PrecipitationTemperature.GEOTOP, SurfaceCoupling.implicit());
+				PrecipitationTemperature.GEOTOP, SurfaceCoupling.implicit(), ThinSnow.geotop());
 	}
 
 	/**
@@ -122,12 +135,18 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 	/** Same processes with another restratification policy. */
 	public SnowProcesses withRestratification(RestratificationPolicy policy) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, policy, precipitation, surfaceCoupling);
+				slopeAngle, percolation, sublimationThickness, policy, precipitation, surfaceCoupling, thinSnow);
 	}
 
 	/** Same processes with another surface coupling. */
 	public SnowProcesses withSurfaceCoupling(SurfaceCoupling coupling) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling);
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling, thinSnow);
+	}
+
+	/** Same processes with another thin-snow regime. */
+	public SnowProcesses withThinSnow(ThinSnow regime) {
+		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, regime);
 	}
 }

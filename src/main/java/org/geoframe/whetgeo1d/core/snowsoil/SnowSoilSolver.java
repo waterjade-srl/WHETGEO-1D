@@ -382,8 +382,12 @@ public final class SnowSoilSolver {
 					forcing.surface().cosIncidence(), forcing.groundAlbedoVisible(),
 					forcing.groundAlbedoNearInfrared());
 			albedo = albedos.broadband(forcing.surface().shortwaveDirect(), forcing.surface().shortwaveDiffuse());
-			balance = SurfaceEnergyBalance.atStartOfStep(processes.surfaceBalance(), processes.turbulence(),
-					forcing.surface(), albedos, startTemperature);
+			// GEOtop's thin-snow regime (fidelity): soil roughness and emissivity under a thin pack
+			double depth = SnowColumn.depth(start);
+			balance = SurfaceEnergyBalance.atStartOfStep(
+					processes.thinSnow().surfaceBalance(processes.surfaceBalance(), depth),
+					processes.thinSnow().turbulence(processes.turbulence(), depth), forcing.surface(), albedos,
+					startTemperature);
 			SurfaceFluxes startFluxes = balance.evaluate(startTemperature);
 			lineAtStart = startFluxes.energyBalance();
 			lineSlope = startFluxes.derivative();

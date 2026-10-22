@@ -1062,7 +1062,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 				t.maxIterations(), t.minimumWindSpeed(), t.maximumResistance(), t.capVapourResistance()));
 		return new SnowProcesses(p.equationOfState(), p.surfaceBalance(), turbulence, p.albedo(), p.restoringSnowfall(),
 				p.compaction(), p.slopeAngle(), p.percolation(), p.sublimationThickness(), p.restratification(),
-				p.precipitation(), p.surfaceCoupling());
+				p.precipitation(), p.surfaceCoupling(), p.thinSnow());
 	}
 
 	private List<String> inputFileList() {
