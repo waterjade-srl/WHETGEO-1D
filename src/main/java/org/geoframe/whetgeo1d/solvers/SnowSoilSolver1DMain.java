@@ -45,6 +45,8 @@ import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
 import org.geoframe.whetgeo1d.core.snowsoil.RunDiagnostics;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowProcesses;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilRestart;
+import org.geoframe.whetgeo1d.core.snowsoil.StepNotConvergedException;
+import org.geoframe.whetgeo1d.core.snowsoil.StepRejection;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilStepResult;
 import org.geoframe.whetgeo1d.core.snowsoil.SoilHeatSetup;
@@ -568,6 +570,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	@Unit("s")
 	public double restartInterval = 0.0;
+	@Description("Extra acceptance criteria of the steps, e.g. of a validation run or a fault injected by a test.")
+	@In
+	public List<StepController.Check> stepChecks;
 	@Description("Restart state to carry on from; empty: start from the initial conditions.")
 	@In
 	public String resumeFrom = "";
@@ -638,8 +643,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 			setup();
 		}
 		long end = epochSeconds(inCurrentDate);
+		double[] forcingStateBefore = cloudiness.state();
 		StepForcing forcing = forcing(end);
-		SnowSoilStepResult result = advance(forcing);
+		SnowSoilStepResult result;
+		try {
+			result = advance(forcing);
+		} catch (StepNotConvergedException e) {
+			throw stopOnFailure(e, forcingStateBefore);
+		}
 		publish(result);
 		outRunDiagnostics = controller.diagnostics();
 		for (SnowSoilOutputWriter writer : activeWriters) {
@@ -680,6 +691,56 @@ public class SnowSoilSolver1DMain extends HMModel {
 	 */
 	private SnowSoilStepResult advance(StepForcing forcing) {
 		return controller.advance(forcing).result();
+	}
+
+	/**
+	 * Stop on a step that does not converge (SOL-5, policy {@code Stop}): the
+	 * controller has left the solver at the start of the failed interval, the
+	 * last accepted state. That state goes to {@link #restartPath} (or to
+	 * {@link #outputPath} without one) as the usual pair
+	 * {@code snowsoil_restart_<t>.bin} + {@code .forcing}, with the forcing
+	 * state as it was before the failed step, and the rejections of the run to
+	 * {@code snowsoil_rejections_<t>.txt}; the writers are closed, so that the
+	 * outputs up to the last accepted step are complete; the failure is
+	 * rethrown saying where the state is. A run resumed from it with
+	 * {@link #resumeFrom} goes on as the continuous run would have.
+	 *
+	 * @param forcingState state of the forcing estimates before the failed step
+	 */
+	private StepNotConvergedException stopOnFailure(StepNotConvergedException e, double[] forcingState) {
+		// the controller has already logged the rejections of the failed interval
+		StringBuilder log = new StringBuilder();
+		for (StepRejection r : controller.rejectionLog()) {
+			log.append(r.describe()).append('\n');
+		}
+		String where = "not saved (no restartPath or outputPath)";
+		String folderName = restartPath != null && !restartPath.isBlank() ? restartPath
+				: outputPath != null && !outputPath.isBlank() ? outputPath : null;
+		if (folderName != null) {
+			try {
+				Path folder = Files.createDirectories(Path.of(folderName));
+				SnowSoilRestart state = controller.checkpoint();
+				long t = (long) state.time();
+				Path file = folder.resolve(String.format("snowsoil_restart_%d.bin", t));
+				try (OutputStream out = Files.newOutputStream(file)) {
+					state.write(out);
+				}
+				writeForcingState(forcingStateFile(file), forcingState);
+				Files.writeString(folder.resolve(String.format("snowsoil_rejections_%d.txt", t)), log.toString());
+				where = "saved in " + file + " (resume with resumeFrom)";
+			} catch (IOException | RuntimeException io) {
+				e.addSuppressed(io);
+				where = "could not be saved: " + io.getMessage();
+			}
+		}
+		System.err.println("SnowSoilSolver1DMain: rejected steps of the run:\n" + log);
+		try {
+			close();
+		} catch (IOException io) {
+			e.addSuppressed(io);
+		}
+		return new StepNotConvergedException(e.getMessage() + ". The run stopped at " + inCurrentDate
+				+ "; the state of the last accepted step (" + (long) controller.time() + " s) " + where, e);
 	}
 
 	/**
@@ -829,6 +890,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		} else {
 			controller = new StepController(solver, settings, epochSeconds(inCurrentDate) - tTimeStep, label);
 		}
+		if (stepChecks != null) {
+			stepChecks.forEach(controller::addCheck);
+		}
 		if (restartPath != null && !restartPath.isBlank() && restartInterval > 0.0) {
 			Path folder = Files.createDirectories(Path.of(restartPath));
 			controller.onRestart(state -> {
@@ -859,7 +923,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private static final int FORCING_STATE_MAGIC = 0x534E4643; // "SNFC"
 
 	private void writeForcingState(Path file) throws IOException {
-		double[] state = cloudiness.state();
+		writeForcingState(file, cloudiness.state());
+	}
+
+	private static void writeForcingState(Path file, double[] state) throws IOException {
 		try (var out = new java.io.DataOutputStream(new java.io.BufferedOutputStream(Files.newOutputStream(file)))) {
 			out.writeInt(FORCING_STATE_MAGIC);
 			out.writeInt(1);
