@@ -39,6 +39,7 @@ import java.util.function.ToDoubleFunction;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilStepResult;
 import org.geoframe.whetgeo1d.snow.SnowCell;
+import org.geoframe.whetgeo1d.snow.surface.SurfaceFluxes;
 
 /**
  * Point outputs in CSV for the comparisons with GEOtop: the files, columns,
@@ -280,6 +281,11 @@ public final class SnowSoilCsvWriter implements SnowSoilOutputWriter {
 
 	private static String oneLine(String s) {
 		return s.replace('\n', ' ').replace('\r', ' ');
+	}
+
+	@Override
+	public void bareSoilSurface(SurfaceFluxes fluxes, double surfaceTemperature) {
+		accumulator.bareSoilSurface(fluxes, surfaceTemperature);
 	}
 
 	@Override

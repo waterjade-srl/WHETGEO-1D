@@ -4,6 +4,7 @@
 # in the local Maven repository.
 #   ./run.sh           forcing files (data/) and the run (output/)
 #   ./run.sh forcing   only the forcing files
+#   ./run.sh seb       forcing and the run with the bare-soil energy balance (output_seb/)
 set -euo pipefail
 CASE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$CASE/../../.." && pwd)
@@ -19,7 +20,9 @@ echo "forcing: $(ls "$CASE/data" | wc -l) files in $CASE/data"
 
 # oms-3.5.12.jar first: hm-gears carries an incompatible copy of oms3.dsl
 start=$(date +%s)
-java -Doms.prj="$CASE" -cp "$OMS_JAR:$CP" oms3.CLI -r "$CASE/snowsoil_matsch_p2_ref_007.sim" 2>&1 | tee "$CASE/.run.log"
+SIM=snowsoil_matsch_p2_ref_007.sim
+[ "${1:-}" = "seb" ] && SIM=snowsoil_matsch_p2_ref_007_seb.sim
+java -Doms.prj="$CASE" -cp "$OMS_JAR:$CP" oms3.CLI -r "$CASE/$SIM" 2>&1 | tee "$CASE/.run.log"
 # oms3.CLI exits with 0 even on an error
 if grep -q ">>>> Error" "$CASE/.run.log"; then echo "the run failed, see $CASE/.run.log" >&2; exit 1; fi
-echo "run: $(( $(date +%s) - start )) s, outputs in $CASE/output"
+echo "run: $(( $(date +%s) - start )) s ($SIM)"
