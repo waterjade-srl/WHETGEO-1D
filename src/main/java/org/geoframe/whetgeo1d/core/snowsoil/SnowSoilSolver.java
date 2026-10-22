@@ -443,10 +443,30 @@ public final class SnowSoilSolver {
 			double[] temperatures = heatStep.temperatures();
 			surfaceChange = Math.abs(temperatures[temperatures.length - 1] - linearisedAt);
 		}
+		// GEOtop's single layer that melts away (thin-snow regime, fidelity): merged into the soil, the step
+		// solved again as bare soil (sux = -6, energy.balance.cc:702-729, 2130-2141)
+		boolean merged = snowAtStart && !imposedSnowTop && start.size() == 1
+				&& processes.thinSnow().mergesMeltedLayer() && ice(heatStep.snow()) < MERGED_LAYER_ICE;
+		if (merged) {
+			heat.setSoilTemperatures(soilStart);
+			pendingSurfaceEnergy += pendingApplied;
+			pendingApplied = 0.0;
+			if (forcing.bareSoilTop() instanceof TopBoundary.SurfaceFlux flux) {
+				pendingApplied = pendingSurfaceEnergy;
+				top = new TopBoundary.SurfaceFlux(flux.flux() + pendingApplied / dt, flux.fluxDerivative());
+				pendingSurfaceEnergy -= pendingApplied;
+			} else {
+				top = forcing.bareSoilTop();
+			}
+			heatStep = heat.step(List.of(), top, forcing.bottomValue(), dt);
+			surfaceConverged = true;
+			surfaceChange = Double.NaN;
+			albedo = Double.NaN;
+		}
 		int heatWorstCell = heat.worstCell();
 		List<SnowCell> cells = heatStep.snow();
-		double heatEnergy = SnowColumn.internalEnergy(cells) - energyBefore;
-		double melt = ice(start) - ice(cells);
+		double heatEnergy = merged ? 0.0 : SnowColumn.internalEnergy(cells) - energyBefore;
+		double melt = merged ? 0.0 : ice(start) - ice(cells);
 
 		// 4: vapour exchange at the final surface temperature
 		SurfaceFluxes surface = null;
@@ -461,6 +481,10 @@ public final class SnowSoilSolver {
 		if (imposedSnowTop) {
 			double[] temperatures = heatStep.temperatures();
 			surfaceTemperature = temperatures[temperatures.length - 1];
+		} else if (merged) {
+			// the layer leaves for the soil whole, ice and liquid with its energy
+			toSoilMass += massBefore;
+			toSoilEnergy += energyBefore;
 		} else if (snowAtStart) {
 			double[] temperatures = heatStep.temperatures();
 			surfaceTemperature = temperatures[temperatures.length - 1];
@@ -480,7 +504,7 @@ public final class SnowSoilSolver {
 
 		// 5: compaction and melt shrinkage, against the ice at the start of the step
 		cells = processes.compaction().compact(cells, dt, processes.slopeAngle());
-		cells = MeltShrinkage.apply(start.subList(0, cells.size()), cells);
+		cells = MeltShrinkage.apply(merged ? List.of() : start.subList(0, cells.size()), cells);
 		// GEOtop's porosity cap after the shrinkage (fidelity; nothing in the recommended configuration)
 		cells = processes.compaction().capDensity(cells);
 
@@ -573,8 +597,10 @@ public final class SnowSoilSolver {
 			if (anyFreezing) {
 				water.setSuctions(liquidSuctions);
 			}
+			// no soil evaporation under the snow (LINK-2): sinks only when the soil was the surface of the step
+			double[] sinks = snowAtStart && !merged ? null : forcing.soilWaterSinks();
 			soilWater = water.step(totalSoilInput, forcing.soilWaterBottomValue(), heat.soilTemperatures(), anyIce ? ice : null,
-					forcing.soilWaterSinks(), dt);
+					sinks, dt);
 			double[] newHeatSuctions = soilWater.suctions().clone();
 			for (int i = 0; i < ice.length && anyFreezing; i++) {
 				if (!freezing[eos[i]]) {
@@ -623,6 +649,9 @@ public final class SnowSoilSolver {
 		}
 		return false;
 	}
+
+	/** Ice below which GEOtop's single snow layer counts as melted away [kg m-2] ({@code energy.balance.cc:2137}). */
+	static final double MERGED_LAYER_ICE = 1e-5;
 
 	private static double ice(List<SnowCell> cells) {
 		double sum = 0.0;

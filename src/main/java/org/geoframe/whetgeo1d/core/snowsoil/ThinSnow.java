@@ -37,7 +37,12 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceEnergyBalance;
  * here;</li>
  * <li><b>emissivity</b>: the soil's ({@code SoilEmissiv}, default 0.96) unless
  * D &gt; 10 mm ({@code energy.balance.cc:591-599}; default
- * {@code parameters.cc:1273}).</li>
+ * {@code parameters.cc:1273});</li>
+ * <li><b>a single layer that melts away</b> in the step is not kept as a
+ * liquid "snow" cell: GEOtop merges it into the top soil layer and solves the
+ * step again as bare soil ({@code sux = -6}, {@code energy.balance.cc:702-729,
+ * 2130-2141}: one snow layer whose ice falls below 10⁻⁵ kg m⁻²). Active
+ * whenever the regime is ({@link #mergesMeltedLayer()}).</li>
  * </ul>
  *
  * The blending of the albedo with the ground for thin snow (SURF-5) is part of
@@ -83,6 +88,14 @@ public record ThinSnow(double roughnessThreshold, double soilRoughness, double e
 	/** Same with GEOtop's keywords: {@code SoilRoughness}, {@code ThresSnowSoilRough} [m], {@code SoilEmissiv}. */
 	public ThinSnow with(double roughness, double threshold, double emissivity) {
 		return new ThinSnow(threshold, roughness, emissivityThreshold, emissivity);
+	}
+
+	/**
+	 * Whether a single snow layer that melts away in the step goes to the soil
+	 * and the step is solved as bare soil, as GEOtop: with the regime on.
+	 */
+	public boolean mergesMeltedLayer() {
+		return roughnessThreshold > 0.0 || emissivityThreshold > 0.0;
 	}
 
 	/** Whether the soil roughness applies at snow depth D [m]: GEOtop's {@code snowD > thres} is false. */

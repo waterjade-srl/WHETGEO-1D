@@ -92,22 +92,27 @@ Both runs take 3068 steps, every heat solve converges, and each runs in about 10
 
 GEOtop's `soilTz` here is its `SoilAveragedTempProfileFile`, the soil temperature averaged over the hour, and its point `Tsurface` is an hourly mean too. The column's `soilTzav.csv` and `Tsurface` are the matching means, so the comparison uses them. An earlier comparison used end-of-hour temperatures and showed a "faster thaw" of the top cells; that was this mismatch, not physics.
 
+The case's thin-snow keywords are passed in `geotopSnowParameters`: `SoilRoughness = 100`, `ThresSnowSoilRough = 100` and `SoilEmissiv = 0.96`. Fidelity also merges a single snow layer that melts away within a step into the soil, as GEOtop's `sux = -6`.
+
 **Within the tolerances (both runs):**
 
-- SWE: RMSE 0.02 mm, peak −8 % (imposed `Tsurface`) or −9 % (bare-soil balance);
-- HS: RMSE 1.7 mm;
+- SWE RMSE: 0.06 mm with `Tsurface` imposed, 0.03 mm with the balance;
+- HS RMSE: 1.4–1.5 mm;
 - LWnet with snow;
-- soil temperature at every depth: RMSE ≤ 0.09 K with `Tsurface` imposed, ≤ 0.14 K with the balance; |bias| ≤ 0.04 K;
+- soil temperature at every depth: RMSE ≤ 0.09 K with `Tsurface` imposed, ≤ 0.16 K with the balance; |bias| ≤ 0.04 K;
 - maximum frost depth: same cell, 15 mm.
 
-With the bare-soil balance, also melt (−10 %) and θw / θi of the top cell. GEOtop's face conductivity in Richards is now the fidelity default (below).
+Only with `Tsurface` imposed: SWnet, H and LE with snow (2.2, 3.7, 3.6 W m⁻² RMSE). Only with the balance: θw / θi of the top cell.
 
 **Beyond the tolerances:**
 
-- HS max, by 20 mm: GEOtop keeps the thickness of a melting single layer;
-- runoff −21 %; melt −10 % with `Tsurface` imposed;
-- Ts, SWnet, H and LE with snow: thin snow is not ported;
-- with `Tsurface` imposed only, θw / θi of the top cell (θi max off by 0.020, θw RMSE 0.033), driven by the imposed hourly mean.
+- **HS max**, by 17–18 mm: GEOtop keeps the thickness of a melting single layer.
+- **SWE peak, melt and runoff** (peak +80 % / +33 %, melt −36 % / −41 %, runoff −26 % / −24 %, imposed / balance). On 2 November, with snow and rain falling together at about 0 °C, GEOtop melts nearly all the fresh snow as it falls, while the port melts less of it and its pack grows to 1.9 mm against 1.0 mm. Before the merge, a warm liquid "snow" cell melted each new snowfall and hid this difference. The likely place is the snow–soil heat exchange under a 1–5 mm pack; it is still to be isolated.
+- **Ts with snow:** 0.52 / 0.59 K RMSE.
+- **With the balance:** SWnet, H and LE with snow (7.3, 5.4, 9.0 W m⁻²), from hours with partial snow.
+- **With `Tsurface` imposed:** θw / θi of the top cell.
+
+**LE with snow.** The thin-snow regime first made LE worse (11.1 → 14.9 W m⁻² RMSE). Almost all of that came from two hours on 12 October: a trace of snow that had melted in the step was kept as an all-liquid cell at +7 °C, evaporating at the rate of a wet surface (90–106 W m⁻² against GEOtop's 56–58). GEOtop merges such a layer into the soil, so this was a porting error. It is fixed with the merge in fidelity (`ThinSnow.mergesMeltedLayer`, `SnowSoilSolver`), and LE with snow is now 3.6 W m⁻² RMSE with `Tsurface` imposed.
 
 **Water drawn into a frozen cell (fixed).** The first runs used WHETGEO's interface conductivity `max`, which gives a frozen cell the conductivity of the unfrozen cell below it. On frosty nights the top cell therefore saturated: θi 0.43 against GEOtop's 0.38, with +2.1 mm against +1.4 mm in the top three cells. GEOtop takes the conductivity of the upwind cell and caps it with the smaller conductivity of the two cells at saturation with their ice (`water.balance.cc:1007-1047`), including a correction for the viscosity of water (`pedo.funct.h:145-171`). This is now the default of the fidelity configuration (`interfaceHydraulicConductivityModel = GEOtop`), checked against GEOtop's formulas in `FrozenFaceConductivityTest`. Matsch now gains +1.35 against +1.37 mm, with θi 0.374 / 0.306 against 0.376 / 0.310.
 

@@ -138,7 +138,7 @@ new OMS3().sim(name: "snowsoil_matsch_p2_ref_007_seb") {
             "snowsoil.alphaSnow"              1e5
             "snowsoil.maxSnowCells"           10
             // the case's snow keywords of geotop.inpts (GeotopSnowParameters)
-            "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.88, FreshSnowReflNIR=0.63, SnowAgingCoeffVis=0.1108, AlbExtParSnow=182, IrriducibleWatSatSnow=0.0595, SnowEmissiv=0.99, SnowRoughness=1.6, DrySnowDefRate=1.01, WetSnowDefRate=2.49, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=50, SWEtop=2000, MaxSnowLayersMiddle=50, PointSlope=21.4"
+            "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.88, FreshSnowReflNIR=0.63, SnowAgingCoeffVis=0.1108, AlbExtParSnow=182, IrriducibleWatSatSnow=0.0595, SnowEmissiv=0.99, SnowRoughness=1.6, DrySnowDefRate=1.01, WetSnowDefRate=2.49, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=50, SWEtop=2000, MaxSnowLayersMiddle=50, PointSlope=21.4, SoilRoughness=100, ThresSnowSoilRough=100, SoilEmissiv=0.96"
             // SoilAlbVisDry/Wet = 0.15, SoilAlbNIRDry/Wet = 0.25
             "snowsoil.groundAlbedo"             0.15
             "snowsoil.groundAlbedoNearInfrared" 0.25

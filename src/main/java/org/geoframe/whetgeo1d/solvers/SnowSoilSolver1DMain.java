@@ -1339,7 +1339,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 
 		double[] soilT = solver.soilTemperatures();
 		double evaporation = value(inEvaporation);
-		evaporation = Double.isNaN(evaporation) || !solver.snow().isEmpty() ? 0.0 : Math.max(0.0, evaporation);
+		// given for the soil; the solver drops it while snow covers the soil (LINK-2), and keeps it when a
+		// melting single layer leaves the soil as the surface of the step
+		evaporation = Double.isNaN(evaporation) ? 0.0 : Math.max(0.0, evaporation);
 		bareSoilStep = null;
 		if (bareSoilTop == BareSoilTop.ENERGY_BALANCE) {
 			// the skin of the previous step, or the top cell after snow or at the start
