@@ -119,12 +119,18 @@ Full tables and figures are in the notebook. In short (porting − GEOtop, 01/09
   - peaks within 2–6 %;
   - HS 14–17 mm higher on average (settling, SNOW-6).
 - **The soil is 1–1.5 K colder at every depth.** The deficit builds up under snow and is carried down and into the summer. An instrumented GEOtop 3.0 (INDAGINE_SUOLO.md in the case folder of the GEO2GEO workspace) shows why:
-  - **GEOtop's skin node.** GEOtop 3.0 without its skin (`HighestNodeCorrespondsToLayer = 1`) is 1.07–1.32 K colder than with it. That is the porting's deficit: the porting matches GEOtop-without-skin within 0.05 K from 0.5 to 4 m and 0.15–0.2 K at 0.1 m, in H with snow (−4.2 against −4.2 W m⁻², NTGS1 ERA5) and in the SWE peak.
+  - **GEOtop's skin node.** GEOtop 3.0 without its skin (`HighestNodeCorrespondsToLayer = 1`) is 1.07–1.32 K colder than with it. That is the porting's deficit. Before the round-4 face conductance, the porting matched GEOtop-without-skin within 0.05 K from 0.5 to 4 m and 0.15–0.2 K at 0.1 m, in H with snow (−4.2 against −4.2 W m⁻², NTGS1 ERA5) and in the SWE peak. The face conductance (SNOW-3) adds −0.15 K.
   - **Mechanism.** The surface flux reaches the centre of the top cell through half of its thickness. Without the skin, that resistance is missing and the pack insulates the soil less in winter. The halved sensible heat is a symptom: GEOtop with its skin but resistances evaluated at the skin gets the porting's H, and its soil cools by only 0.2 K.
   - **The negative Obukhov lengths** (16–45 % of the snow hours) come from GEOtop restarting the skin at the top-layer temperature at every step (`energy.balance.cc:732`). The resistances are frozen there, 2.3–2.6 K above the air in those hours, while the skin ends the step 1–2 K below it.
   - **Not the emergency path.** The recomputation of the resistances without stable correction never fires: 0 of about 17 000 snow steps per case; switching it off gives byte-identical outputs.
   - **Not the output convention.** GEOtop's soil profile is an hourly mean; `compare.py` now compares the porting's `soilTzav.csv` with it. With one step per hour it equals the end-of-hour value, so the biases are unchanged to the third digit.
-  - **The experimental skin** (`-DexperimentalSkin=true`, off by default; `SnowSoilSolver.setSkin`) closes about two thirds of the gap. With it, the bias at 0.1 / 1 / 4 m is −0.50 / −0.34 / −0.29 K (NTGS1 ERA5), −0.49 / −0.36 / −0.35 (NTGS1 JRA-3Q), −0.55 / −0.42 / −0.41 (NTGS2 ERA5) and −0.53 / −0.41 / −0.41 K (NTGS2 JRA-3Q). No step is rejected.
+  - **The experimental skin** (`-DexperimentalSkin=true`, off by default; `SnowSoilSolver.setSkin`) closes about two thirds of the gap, about 1 K. With it, on the current code, the bias at 0.1 / 1 / 4 m is:
+    - NTGS1 ERA5: −0.58 / −0.41 / −0.36 K, against −1.58 / −1.33 / −1.15 K without;
+    - NTGS1 JRA-3Q: −0.58 / −0.45 / −0.44 K;
+    - NTGS2 ERA5: −0.62 / −0.48 / −0.46 K;
+    - NTGS2 JRA-3Q: −0.60 / −0.49 / −0.48 K.
+
+    No step is rejected.
   - **What remains** is to be investigated (GEOtop's skin conductance at the current iterate, the 0 °C handling of the skin, settling).
 - **Thaw depth** is 20–30 mm shallower at the summer maximum. The summer top is GEOtop's `Tsurface`, so this is the winter deficit.
 - **Speed:** 60–70 s per case for 3 years hourly with 20 soil cells (26 280 steps).
