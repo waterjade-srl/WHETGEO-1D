@@ -109,6 +109,10 @@ public final class SnowSoilSolver {
 	/** ψ_w0 of the freezing cells, storage above saturation included (the heat sees min(ψ_w0, 0)). */
 	private final double[] totalSuctions;
 	private final SnowProcesses processes;
+	/** Snow heat properties, for the conductance of the skin (experimental). */
+	private final SnowHeatProperties heatProperties;
+	/** Experimental skin node over snow (SURF-1/2, GEOtop's default), off by default. */
+	private boolean skin;
 	private final SnowEquationOfState eos;
 
 	private List<SnowCell> snow;
@@ -142,6 +146,7 @@ public final class SnowSoilSolver {
 			DiffusionBoundaryConditionType bottomType, NewtonSettings settings, SnowProcesses processes,
 			List<SnowCell> initialSnow, double initialAge) {
 		this.processes = Objects.requireNonNull(processes, "processes");
+		this.heatProperties = heat;
 		if (heat.equationOfState() != processes.equationOfState()) {
 			throw new IllegalArgumentException("the heat step and the snowpack must share the equation of state");
 		}
@@ -341,6 +346,69 @@ public final class SnowSoilSolver {
 		return lastTerms;
 	}
 
+	/**
+	 * <b>Experimental</b>: a skin node over snow, as GEOtop's default surface
+	 * node ({@code HighestNodeCorrespondsToLayer = 0}): a temperature T<sub>s</sub>
+	 * with no heat capacity at the snow surface, joined to the centre of the top
+	 * cell by the conductance K = k<sub>top</sub> / (Δz<sub>top</sub>/2) of its
+	 * upper half ({@code energy.balance.cc:1580-1594}). With the surface balance
+	 * linearised at T<sub>k</sub>, EB(T<sub>s</sub>) ≈ E<sub>0</sub> + s (T<sub>s</sub> - T<sub>k</sub>),
+	 * the skin is eliminated: T<sub>s</sub> = (E<sub>0</sub> - s T<sub>k</sub> + K T<sub>top</sub>)/(K - s) and the top
+	 * cell receives K (T<sub>s</sub> - T<sub>top</sub>) = K/(K - s) (E<sub>0</sub> + s (T<sub>top</sub> - T<sub>k</sub>)),
+	 * a linear flux the heat driver already takes (SURF-2, "skin by
+	 * elimination"). The sweeps relinearise at the skin temperature; the
+	 * resistances stay frozen at the top-cell temperature at the start of the
+	 * step, where GEOtop restarts its skin ({@code energy.balance.cc:732}). A
+	 * skin above 0 °C is not admitted: the step is solved again without the
+	 * skin, as GEOtop does ({@code energy.balance.cc:2100}). Vapour exchange and
+	 * the linearisation energy use the skin temperature.
+	 *
+	 * <p>
+	 * Off by default; the default configurations are unchanged. Investigation
+	 * of the Canadian case (INDAGINE_SUOLO.md of the case folder): without its
+	 * skin, GEOtop 3.0 reproduces the colder soil of the column.
+	 */
+	public void setSkin(boolean skin) {
+		this.skin = skin;
+	}
+
+	/** Whether the experimental skin node is on. */
+	public boolean skin() {
+		return skin;
+	}
+
+	/** The linearised flux into the top cell through the skin, around T_k (see {@link #setSkin}). */
+	private record SkinLine(double e0, double slope, double tk, double conductance) {
+		double factor() {
+			return conductance / (conductance - slope);
+		}
+
+		/** Flux into the top cell at the top-cell temperature t0 [W m-2]. */
+		double fluxAt(double t0) {
+			return factor() * (e0 + slope * (t0 - tk));
+		}
+
+		/** Its derivative in the top-cell temperature. */
+		double derivative() {
+			return factor() * slope;
+		}
+
+		/** Skin temperature for a top-cell temperature. */
+		double skin(double top) {
+			return (e0 - slope * tk + conductance * top) / (conductance - slope);
+		}
+	}
+
+	private static SkinLine skinLine(SurfaceEnergyBalance balance, double tk, double conductance) {
+		SurfaceFluxes at = balance.evaluate(tk);
+		return new SkinLine(at.energyBalance(), at.derivative(), tk, conductance);
+	}
+
+	private static double topOf(HeatStepResult step) {
+		double[] t = step.temperatures();
+		return t[t.length - 1];
+	}
+
 	/** Advances the column by one step. */
 	public SnowSoilStepResult step(StepForcing forcing) {
 		Objects.requireNonNull(forcing, "forcing");
@@ -399,10 +467,53 @@ public final class SnowSoilSolver {
 
 		// 3: heat, repeated with the surface flux linearised at the last surface temperature
 		double[] soilStart = heat.soilTemperatures();
-		HeatStepResult heatStep = heat.step(start, top, forcing.bottomValue(), dt);
+		HeatStepResult heatStep = null;
 		int sweeps = 1;
-		boolean surfaceConverged = !snowAtStart || imposedSnowTop || processes.surfaceCoupling().maxSweeps() == 1;
+		boolean surfaceConverged = false;
 		double linearisedAt = startTemperature;
+		boolean skinActive = skin && snowAtStart && !imposedSnowTop;
+		double skinTemperature = Double.NaN;
+		if (skinActive) {
+			SnowCell topCell = start.get(start.size() - 1);
+			double conductance = heatProperties.conductivity().conductivity(topCell) / (0.5 * topCell.thickness());
+			double tolerance = processes.surfaceCoupling().temperatureTolerance();
+			SkinLine line = skinLine(balance, startTemperature, conductance);
+			TopBoundary skinTop = new TopBoundary.SurfaceFlux(line.fluxAt(startTemperature) + pendingApplied / dt,
+					line.derivative());
+			heatStep = heat.step(start, skinTop, forcing.bottomValue(), dt);
+			skinTemperature = line.skin(topOf(heatStep));
+			surfaceConverged = processes.surfaceCoupling().maxSweeps() == 1;
+			while (!surfaceConverged && sweeps < processes.surfaceCoupling().maxSweeps()) {
+				if (Math.abs(skinTemperature - line.tk()) <= tolerance) {
+					surfaceConverged = true;
+					break;
+				}
+				line = skinLine(balance, skinTemperature, conductance);
+				skinTop = new TopBoundary.SurfaceFlux(line.fluxAt(startTemperature) + pendingApplied / dt,
+						line.derivative());
+				heat.setSoilTemperatures(soilStart);
+				heatStep = heat.step(start, skinTop, forcing.bottomValue(), dt);
+				skinTemperature = line.skin(topOf(heatStep));
+				sweeps++;
+			}
+			if (!surfaceConverged) {
+				surfaceConverged = Math.abs(skinTemperature - line.tk()) <= tolerance;
+			}
+			linearisedAt = line.tk();
+			if (skinTemperature > MELTING_TEMPERATURE) {
+				// GEOtop does not admit a skin above 0 °C over snow: solved again without it
+				skinActive = false;
+				heat.setSoilTemperatures(soilStart);
+				linearisedAt = startTemperature;
+			} else {
+				lineAtStart = line.fluxAt(startTemperature);
+				lineSlope = line.derivative();
+			}
+		}
+		if (!skinActive) {
+		heatStep = heat.step(start, top, forcing.bottomValue(), dt);
+		sweeps = 1;
+		surfaceConverged = !snowAtStart || imposedSnowTop || processes.surfaceCoupling().maxSweeps() == 1;
 		while (!surfaceConverged && sweeps < processes.surfaceCoupling().maxSweeps()) {
 			double[] temperatures = heatStep.temperatures();
 			double surfaceNow = temperatures[temperatures.length - 1];
@@ -425,8 +536,11 @@ public final class SnowSoilSolver {
 			surfaceConverged = Math.abs(temperatures[temperatures.length - 1] - linearisedAt) <= processes
 					.surfaceCoupling().temperatureTolerance();
 		}
+		}
 		double surfaceChange = Double.NaN;
-		if (snowAtStart && !imposedSnowTop) {
+		if (skinActive) {
+			surfaceChange = Math.abs(skinTemperature - linearisedAt);
+		} else if (snowAtStart && !imposedSnowTop) {
 			double[] temperatures = heatStep.temperatures();
 			surfaceChange = Math.abs(temperatures[temperatures.length - 1] - linearisedAt);
 		}
@@ -450,10 +564,11 @@ public final class SnowSoilSolver {
 			surfaceTemperature = temperatures[temperatures.length - 1];
 		} else if (snowAtStart) {
 			double[] temperatures = heatStep.temperatures();
-			surfaceTemperature = temperatures[temperatures.length - 1];
+			double topCellTemperature = temperatures[temperatures.length - 1];
+			surfaceTemperature = skinActive ? skinTemperature : topCellTemperature;
 			surface = balance.evaluate(surfaceTemperature);
 			linearisation = dt
-					* (lineAtStart + lineSlope * (surfaceTemperature - startTemperature) - surface.energyBalance());
+					* (lineAtStart + lineSlope * (topCellTemperature - startTemperature) - surface.energyBalance());
 			Sublimated sublimated = SnowSublimation.apply(cells, surface.vapourFlux() * dt, balance.vapourPhase(),
 					processes.sublimationThickness(), eos);
 			cells = sublimated.cells();
