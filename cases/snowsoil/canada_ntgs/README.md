@@ -85,10 +85,14 @@ The forcing is GEOtop's own, computed by the temporary fidelity tools (`GeotopFo
 
 - **Bare soil:** the column has no bare-soil energy balance. Without snow at the start of a step, GEOtop's `Tsurface` is the Dirichlet top, at the surface face of the top cell. When GEOtop still has snow and the column has none, that value is GEOtop's snow-surface temperature.
 - **Evaporation:** irrelevant with fixed water, so not passed.
+- **Ported since the first runs (round 4), active in fidelity:**
+  - GEOtop's thin-snow regime: soil roughness and emissivity below `ThresSnowSoilRough` = `SoilRoughness` = 10 mm by default, so a few days in autumn;
+  - GEOtop's snow–soil and snow–snow face conductance (SNOW-3);
+  - GEOtop's porosity cap at ρw (SNOW-6).
+
+  On NTGS1 ERA5 only the face conductance moves the soil, by −0.15 K at every depth. The other two change it by less than 0.01 K. `-DthinSnowRegime=None`, `-DfaceConductance=Harmonic_Mean` and `-DporosityCap=Ice_Density` (through `SIM_OPTS`) restore the previous behaviour.
 - **Not ported:**
-  - thin-snow roughness and emissivity: below `ThresSnowSoilRough` = `SoilRoughness` = 10 mm by default, so a few days in autumn;
   - shortwave penetration (SNOW-7) and delayed refreezing (STA-3);
-  - GEOtop's snow–soil interface conductance (SNOW-3; the column uses the harmonic mean);
   - GEOtop's skin node over snow (`HighestNodeCorrespondsToLayer = 0`, GEOtop's default; SURF-1/2 agreed, not implemented): the main cause of the colder soil (see Results);
   - GEOtop's recomputation of the turbulence without stable correction inside the Newton loop (after 10 iterations with an iterate below −50 °C): it never fires in these cases (see Results).
 
@@ -121,6 +125,6 @@ Full tables and figures are in the notebook. In short (porting − GEOtop, 01/09
   - **Not the emergency path.** The recomputation of the resistances without stable correction never fires: 0 of about 17 000 snow steps per case; switching it off gives byte-identical outputs.
   - **Not the output convention.** GEOtop's soil profile is an hourly mean; `compare.py` now compares the porting's `soilTzav.csv` with it. With one step per hour it equals the end-of-hour value, so the biases are unchanged to the third digit.
   - **The experimental skin** (`-DexperimentalSkin=true`, off by default; `SnowSoilSolver.setSkin`) closes about two thirds of the gap. With it, the bias at 0.1 / 1 / 4 m is −0.50 / −0.34 / −0.29 K (NTGS1 ERA5), −0.49 / −0.36 / −0.35 (NTGS1 JRA-3Q), −0.55 / −0.42 / −0.41 (NTGS2 ERA5) and −0.53 / −0.41 / −0.41 K (NTGS2 JRA-3Q). No step is rejected.
-  - **What remains** is to be investigated, starting from the snow–soil interface conductance (SNOW-3).
+  - **What remains** is to be investigated (GEOtop's skin conductance at the current iterate, the 0 °C handling of the skin, settling).
 - **Thaw depth** is 20–30 mm shallower at the summer maximum. The summer top is GEOtop's `Tsurface`, so this is the winter deficit.
 - **Speed:** 60–70 s per case for 3 years hourly with 20 soil cells (26 280 steps).

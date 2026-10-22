@@ -69,7 +69,21 @@ public class GeotopSnowParametersTest {
 
 	@Test
 	public void unknownKeywordIsAnError() {
-		assertThrows(IllegalArgumentException.class, () -> GeotopSnowParameters.parse("ThresSnowSoilRough=100"));
+		assertThrows(IllegalArgumentException.class, () -> GeotopSnowParameters.parse("SnowCorrFactor=1.3"));
 		assertThrows(IllegalArgumentException.class, () -> GeotopSnowParameters.parse("SnowEmissiv"));
+	}
+
+	@Test
+	public void thinSnowKeywords() {
+		// Matsch_P2_Ref_007: SoilRoughness = ThresSnowSoilRough = 100 mm, SoilEmissiv = 0.96
+		org.geoframe.whetgeo1d.core.snowsoil.ThinSnow t = GeotopSnowParameters
+				.parse("SoilRoughness=100, ThresSnowSoilRough=100, SoilEmissiv=0.95").apply(FIDELITY).thinSnow();
+		assertEquals(0.1, t.soilRoughness(), 1e-15);
+		assertEquals(0.1, t.roughnessThreshold(), 1e-15);
+		assertEquals(0.95, t.soilEmissivity(), 0.0);
+		assertEquals(0.010, t.emissivityThreshold(), 0.0);
+		// ThresSnowSoilRough defaults to SoilRoughness, as in GEOtop
+		t = GeotopSnowParameters.parse("SoilRoughness=50").apply(FIDELITY).thinSnow();
+		assertEquals(0.05, t.roughnessThreshold(), 1e-15);
 	}
 }

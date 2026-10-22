@@ -45,6 +45,8 @@ import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
 import org.geoframe.whetgeo1d.core.snowsoil.RunDiagnostics;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowProcesses;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilRestart;
+import org.geoframe.whetgeo1d.core.snowsoil.ThinSnow;
+import org.geoframe.whetgeo1d.snow.GeotopCompaction;
 import org.geoframe.whetgeo1d.core.snowsoil.StepNotConvergedException;
 import org.geoframe.whetgeo1d.core.snowsoil.StepRejection;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowSoilSolver;
@@ -61,6 +63,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.IncomingLongwave;
 import org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopSnowParameters;
 import org.geoframe.whetgeo1d.core.snowsoil.BareSoilEnergyBalance;
+import org.geoframe.whetgeo1d.core.snowsoil.SoilWaterDriver;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
@@ -269,6 +272,18 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public String snowThermalConductivity = "";
 
+	@Description("Conductance of the snow faces (SNOW-3): Harmonic Mean or Geotop Mean Of Arguments; empty: GEOtop's in fidelity, harmonic in recommended.")
+	@In
+	public String faceConductance = "";
+
+	@Description("Thin-snow regime (GEOtop's soil roughness and emissivity under a thin pack): Geotop or None; empty: GEOtop's in fidelity, none in recommended. For sensitivity runs.")
+	@In
+	public String thinSnowRegime = "";
+
+	@Description("Porosity cap of the compaction (SNOW-6): Geotop (rho_w, may thicken) or Ice Density; empty: GEOtop's in fidelity. For sensitivity runs.")
+	@In
+	public String porosityCap = "";
+
 	@Description("Stability correction of the turbulent fluxes over snow (Both, Unstable only, Stable only, Neutral); empty: the configuration's.")
 	@In
 	public String stabilityCorrection = "";
@@ -465,8 +480,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	public String[] typeUHCModel = { "Mualem Van Genuchten" };
 	@In
 	public String typeUHCTemperatureModel = "notemperature";
+	@Description("Conductivity of the faces of Richards: WHETGEO's (max, min, arithmetic mean, ...) or GEOtop (upwind cell capped by the saturated conductivities with ice, viscosity correction); empty: GEOtop in fidelity, max in recommended.")
 	@In
-	public String interfaceHydraulicConductivityModel = "max";
+	public String interfaceHydraulicConductivityModel = "";
 	@In
 	public double waterNewtonTolerance = 1e-11;
 	@In
@@ -901,7 +917,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 		SoilWaterProperties water = null;
 		if (EnumUtils.fromString(SoilWaterMode.class, soilWaterMode) == SoilWaterMode.RICHARDS) {
 			water = new SoilWaterProperties(typeWaterClosureEquation, typeWaterEquationState, typeUHCModel,
-					typeUHCTemperatureModel, interfaceHydraulicConductivityModel,
+					typeUHCTemperatureModel,
+					interfaceHydraulicConductivityModel == null || interfaceHydraulicConductivityModel.isBlank()
+							? (fidelity ? SoilWaterDriver.GEOTOP_INTERFACE : "max")
+							: interfaceHydraulicConductivityModel,
 					RichardsBoundaryConditionType.fromString(soilWaterBottomType), waterNewtonTolerance,
 					waterMaxIterations, 1, waterMaxSubstep, iceImpedance);
 		}
@@ -913,11 +932,27 @@ public class SnowSoilSolver1DMain extends HMModel {
 			processes = withStability(processes, EnumUtils.fromString(StabilityCorrection.class, stabilityCorrection));
 		}
 		processes = GeotopSnowParameters.parse(geotopSnowParameters).apply(processes);
+		if (thinSnowRegime != null && !thinSnowRegime.isBlank()) {
+			processes = processes.withThinSnow(thinSnowRegime.trim().equalsIgnoreCase("none") ? ThinSnow.none()
+					: processes.thinSnow().roughnessThreshold() > 0.0 ? processes.thinSnow() : ThinSnow.geotop());
+		}
+		if (porosityCap != null && !porosityCap.isBlank()
+				&& processes.compaction() instanceof GeotopCompaction compaction) {
+			GeotopCompaction.Parameters c = compaction.parameters();
+			boolean geotopCap = porosityCap.trim().equalsIgnoreCase("geotop");
+			processes = processes.withCompaction(new GeotopCompaction(new GeotopCompaction.Parameters(
+					c.maxIceVolumeFraction(), c.dryDeformationRate(), c.densityCutoff(), c.wetDeformationRate(),
+					c.viscosity(), c.minimumIceMass(), geotopCap), processes.equationOfState()));
+		}
 		SnowThermalConductivity conductivity = snowThermalConductivity == null || snowThermalConductivity.isBlank()
 				? (fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991)
 				: EnumUtils.fromString(SnowThermalConductivity.class, snowThermalConductivity);
 		int capacity = maxSnowCells > 0 ? maxSnowCells : (fidelity ? 10 : 11);
-		SnowHeatProperties heat = new SnowHeatProperties(eos, conductivity, capacity);
+		SnowHeatProperties.FaceConductance faces = faceConductance == null || faceConductance.isBlank()
+				? (fidelity ? SnowHeatProperties.FaceConductance.GEOTOP_MEAN_OF_ARGUMENTS
+						: SnowHeatProperties.FaceConductance.HARMONIC_MEAN)
+				: EnumUtils.fromString(SnowHeatProperties.FaceConductance.class, faceConductance);
+		SnowHeatProperties heat = new SnowHeatProperties(eos, conductivity, capacity, faces);
 		bottomType = DiffusionBoundaryConditionType.fromString(bottomBCType);
 		if (bottomType.name().startsWith("TOP")) {
 			throw new IllegalArgumentException("bottomBCType must be a bottom condition, got " + bottomBCType);
@@ -953,6 +988,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 
 		Map<String, String> attributes = new LinkedHashMap<>();
 		attributes.put("snowThermalConductivity", conductivity.name());
+		attributes.put("faceConductance", faces.name());
 		attributes.put("stabilityCorrection", processes.turbulence().parameters().stability().name());
 		attributes.put("maxSnowCells", Integer.toString(capacity));
 		attributes.put("alphaSnow", Double.toString(alphaSnow));
@@ -973,6 +1009,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("snowTop", snowTop.name());
 		attributes.put("bottomBC", bottomType.name());
 		attributes.put("soilWaterBottomBC", water == null ? "none" : water.bottomType().name());
+		if (water != null) {
+			attributes.put("interfaceHydraulicConductivity", water.interfaceHydraulicConductivityModel());
+		}
 		attributes.put("latitude", Double.toString(latitude));
 		attributes.put("longitude", Double.toString(longitude));
 		attributes.put("standardTime", Double.toString(standardTime));
@@ -1129,7 +1168,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 				t.maxIterations(), t.minimumWindSpeed(), t.maximumResistance(), t.capVapourResistance()));
 		return new SnowProcesses(p.equationOfState(), p.surfaceBalance(), turbulence, p.albedo(), p.restoringSnowfall(),
 				p.compaction(), p.slopeAngle(), p.percolation(), p.sublimationThickness(), p.restratification(),
-				p.precipitation(), p.surfaceCoupling());
+				p.precipitation(), p.surfaceCoupling(), p.thinSnow());
 	}
 
 	private List<String> inputFileList() {

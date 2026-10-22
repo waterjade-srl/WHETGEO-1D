@@ -54,15 +54,20 @@ import java.util.List;
  * after the solve.
  *
  * <p>
+ * <b>Porosity cap</b> (SNOW-6). GEOtop stops compacting at
+ * θ_i = w_i / (ρ_i D) = θ_max (partial ice density 917 · 0.7 = 641.9 kg m-3)
+ * but then, after the melt shrinkage, caps the cell at w_i / (ρ_w D) = θ_max
+ * (700 kg m-3), resetting a denser cell (after refreezing, say) to the cap and
+ * so adding volume ({@code snow.cc:1104-1110}). With
+ * {@link Parameters#geotopCap()} (fidelity) this is reproduced: the floor of
+ * the compaction is ρ_w θ_max and {@link #capDensity} applies GEOtop's cap
+ * after the shrinkage, to the cells above the minimum ice. Without it
+ * (recommended), one density, ρ_i: a compacted cell never goes beyond
+ * ρ_i θ_max and no cell is ever thickened.
+ *
+ * <p>
  * Departures from GEOtop:
  * <ul>
- * <li>one density for volumetric ice (A14): GEOtop stops compacting at
- * θ_i = w_i / (ρ_i D) = θ_max (partial ice density 917 · 0.7 = 641.9 kg m-3)
- * but then caps the cell at w_i / (ρ_w D) = θ_max (700 kg m-3). Here both use
- * ρ_i: a compacted cell never goes beyond ρ_i θ_max;</li>
- * <li>the cap never thickens a cell: GEOtop resets a cell whose ice is denser
- * than the cap (after refreezing, say) to the cap, adding volume; here such a
- * cell is left as it is, so that compaction never increases a thickness;</li>
  * <li>a cell is never compacted below the volume of its ice plus its liquid,
  * w_i/ρ_i + w_l/ρ_w (GEOtop has no such guard; with θ_max &lt; 1 it matters only
  * for a cell already over-filled with water);</li>
@@ -105,9 +110,19 @@ public final class GeotopCompaction implements CompactionModel {
 	 *                             density [kg s m-2] ({@code SnowViscosity}, 110)
 	 * @param minimumIceMass       cells with less ice are not compacted [kg m-2];
 	 *                             GEOtop {@code simpl_snow · max_weq_snow}
+	 * @param geotopCap            GEOtop's porosity cap at ρ_w θ_max, which
+	 *                             may thicken a cell (fidelity); false: the cap
+	 *                             at ρ_i θ_max that never thickens
 	 */
 	public record Parameters(double maxIceVolumeFraction, double dryDeformationRate, double densityCutoff,
-			double wetDeformationRate, double viscosity, double minimumIceMass) {
+			double wetDeformationRate, double viscosity, double minimumIceMass, boolean geotopCap) {
+
+		/** Parameters with the cap at ρ_i θ_max. */
+		public Parameters(double maxIceVolumeFraction, double dryDeformationRate, double densityCutoff,
+				double wetDeformationRate, double viscosity, double minimumIceMass) {
+			this(maxIceVolumeFraction, dryDeformationRate, densityCutoff, wetDeformationRate, viscosity,
+					minimumIceMass, false);
+		}
 
 		public Parameters {
 			if (!(maxIceVolumeFraction > 0.0 && maxIceVolumeFraction <= 1.0)) {
@@ -126,10 +141,11 @@ public final class GeotopCompaction implements CompactionModel {
 		/**
 		 * GEOtop 3.0 defaults ({@code parameters.cc:1358-1362}): θ_max = 0.7,
 		 * k_dry = 1, ρ_cut = 100 kg m-3, k_wet = 1.5, η0 = 10⁶ kg s m-2; minimum ice
-		 * 0.1 × 5 kg m-2 ({@code snow.cc:47}, {@code parameters.cc:1372}).
+		 * 0.1 × 5 kg m-2 ({@code snow.cc:47}, {@code parameters.cc:1372}); GEOtop's
+		 * porosity cap at ρ_w θ_max.
 		 */
 		public static Parameters geotopDefaults() {
-			return new Parameters(0.7, 1.0, 100.0, 1.5, 1.0e6, 0.5);
+			return new Parameters(0.7, 1.0, 100.0, 1.5, 1.0e6, 0.5, true);
 		}
 
 		/**
@@ -212,9 +228,32 @@ public final class GeotopCompaction implements CompactionModel {
 	 * the volume of its ice and its liquid.
 	 */
 	public double minimumThickness(SnowCell cell) {
-		double atMaxIce = cell.iceMass() / (ICE_DENSITY * parameters.maxIceVolumeFraction());
+		double capDensity = parameters.geotopCap() ? WATER_DENSITY : ICE_DENSITY;
+		double atMaxIce = cell.iceMass() / (capDensity * parameters.maxIceVolumeFraction());
 		double filled = cell.iceMass() / ICE_DENSITY + cell.liquidMass() / WATER_DENSITY;
 		return Math.max(atMaxIce, filled);
+	}
+
+	/**
+	 * GEOtop's porosity cap after the melt shrinkage ({@code snow.cc:1104-1110}),
+	 * with {@link Parameters#geotopCap()}: a cell holding more than the minimum
+	 * ice with w_i / (ρ_w D) &gt; θ_max gets D = w_i / (ρ_w θ_max), thinner or
+	 * thicker. Without it, nothing.
+	 */
+	@Override
+	public List<SnowCell> capDensity(List<SnowCell> cells) {
+		if (!parameters.geotopCap()) {
+			return cells;
+		}
+		SnowCell[] result = new SnowCell[cells.size()];
+		for (int i = 0; i < result.length; i++) {
+			SnowCell cell = cells.get(i);
+			double cap = cell.iceMass() / (WATER_DENSITY * parameters.maxIceVolumeFraction());
+			result[i] = cell.iceMass() > parameters.minimumIceMass() && cell.thickness() < cap
+					? cell.withThickness(cap)
+					: cell;
+		}
+		return List.of(result);
 	}
 
 	private SnowCell compactCell(SnowCell cell, double load, double timeDelta) {

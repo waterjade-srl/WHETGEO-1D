@@ -164,7 +164,9 @@ public record SyntheticSeason(double days, double timeDelta) {
 				: SnowProcesses.recommended(eos, 2.0, 2.0);
 		processes = change.apply(processes);
 		SnowHeatProperties heat = new SnowHeatProperties(eos,
-				fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991, maxSnowCells);
+				fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991, maxSnowCells,
+				fidelity ? SnowHeatProperties.FaceConductance.GEOTOP_MEAN_OF_ARGUMENTS
+						: SnowHeatProperties.FaceConductance.HARMONIC_MEAN);
 		UniformSoil column = soilWater == null ? soil() : wetSoil();
 		return new SnowSoilSolver(freezingSoil ? column.freezingSetup() : column.setup(), soilWater, heat, DiffusionBoundaryConditionType.BOTTOM_DIRICHLET,
 				NewtonSettings.defaults(), processes, List.of(), 0.0);
