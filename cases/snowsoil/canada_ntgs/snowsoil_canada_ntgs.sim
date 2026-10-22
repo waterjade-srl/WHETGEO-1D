@@ -38,7 +38,7 @@ def heatTolerance = (System.getProperty("heatTolerance") ?: "1e-3") as double
 // the component's default: a step that does not converge stops the run, saving the last accepted state
 def onNonConvergence = System.getProperty("onNonConvergence") ?: "Stop"
 // -DexperimentalSkin=true: the experimental skin node over snow (INDAGINE_SUOLO.md), not the reference
-def experimentalSkin = (System.getProperty("experimentalSkin") ?: "false") as boolean
+def experimentalSkin = (System.getProperty("experimentalSkin") ?: "false").toBoolean()
 def label = System.getProperty("label") ? "_" + System.getProperty("label") : ""
 
 new OMS3().sim(name: "snowsoil_canada_ntgs") {

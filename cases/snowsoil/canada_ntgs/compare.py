@@ -7,7 +7,10 @@ It compares, over 01/09/2021 - 01/09/2023 (the first year, from 01/09/2020, is w
 - HS and SWE: daily means, plus the peak of each winter;
 - snow-on and snow-off dates: the longest run of days with daily mean SWE > 1 mm in each hydrological year;
 - surface temperature with snow, hourly, where both models have snow at the end of the hour;
-- soil temperature at 0.1, 0.5, 1, 2 and 4 m: hourly and daily;
+- soil temperature at 0.1, 0.5, 1, 2 and 4 m: hourly and daily. GEOtop's soilTz0001.txt
+  (SoilAveragedTempProfileFile) holds the mean over the hour, so the porting's soilTzav.csv (mean over the
+  record) is compared with it; the end-of-hour soilTz.csv is also reported ("end of hour"), to show the
+  effect of the convention;
 - thaw depth: GEOtop's lowest_thawed_soil_depth, and the same algorithm (find_activelayerdepth_up,
   tables.cc:33-78) on the porting's profiles; daily, plus the summer maximum.
 
@@ -65,6 +68,8 @@ def load(case):
     out = os.path.join(HERE, "output", case)
     pt = _csv(os.path.join(out, "point.csv"))
     tz = _csv(os.path.join(out, "soilTz.csv"))
+    tzav_path = os.path.join(out, "soilTzav.csv")
+    tzav = _csv(tzav_path) if os.path.exists(tzav_path) else tz
     ice = _csv(os.path.join(out, "thetaice.csv"))
     liq = _csv(os.path.join(out, "thetaliq.csv"))
     depths = np.array([float(c) for c in tz.columns[2:]])
@@ -76,9 +81,11 @@ def load(case):
     d["wg_SWE"] = pt["snow_water_equivalent[mm]"]
     d["gt_Ts"] = ref["Tsurface[C]"]
     d["wg_Ts"] = pt["Tsurface[C]"]
+    tav = tzav.iloc[:, 2:].values
     for z in DEPTHS_MM:
         d["gt_T%d" % z] = ref["T%d[C]" % z]
-        d["wg_T%d" % z] = [np.interp(z, depths, row) for row in t]
+        d["wg_T%d" % z] = [np.interp(z, depths, row) for row in tav]
+        d["wg_Tend%d" % z] = [np.interp(z, depths, row) for row in t]
     dz, theta_r = grid(case)
     d["gt_thaw"] = ref["lowest_thawed_soil_depth[mm]"]
     d["wg_thaw"] = thaw_depth(t, ice.iloc[:, 2:].values, liq.iloc[:, 2:].values, dz, theta_r)
@@ -140,6 +147,8 @@ def compare(case):
         rows.append(("T %.1f m hourly" % (z / 1000.0), "K", bias, rmse))
         bias, rmse = _stats(day["wg_T%d" % z], day["gt_T%d" % z])
         rows.append(("T %.1f m daily" % (z / 1000.0), "K", bias, rmse))
+        bias, rmse = _stats(d["wg_Tend%d" % z], d["gt_T%d" % z])
+        rows.append(("T %.1f m hourly, end of hour" % (z / 1000.0), "K", bias, rmse))
     bias, rmse = _stats(day["wg_thaw"], day["gt_thaw"])
     rows.append(("thaw depth daily", "mm", bias, rmse))
     for summer in (2022, 2023):
