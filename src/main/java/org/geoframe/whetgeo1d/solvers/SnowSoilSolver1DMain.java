@@ -59,6 +59,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.TopBoundary;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.CloudTransmissivity;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.IncomingLongwave;
+import org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopSnowParameters;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
@@ -284,6 +285,12 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Albedo of the soil under thin snow, visible and near infrared.")
 	@In
 	public double groundAlbedo = 0.2;
+	@Description("Albedo of the soil under thin snow, near infrared; NaN: groundAlbedo.")
+	@In
+	public double groundAlbedoNearInfrared = Double.NaN;
+	@Description("Fidelity runs: GEOtop snow keywords replacing the defaults, Keyword=value separated by commas (GeotopSnowParameters).")
+	@In
+	public String geotopSnowParameters = "";
 
 	@Description("Absolute tolerance of the heat Newton.")
 	@In
@@ -557,6 +564,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	@Unit("°C")
 	public Map<Integer, double[]> inPrecipitationTemperature;
+	@Description("Cosine of the incidence of the beam on the surface, for the snow albedo; missing: sine of the solar height (flat).")
+	@In
+	@Unit("-")
+	public Map<Integer, double[]> inCosIncidence;
+	@Description("Evaporation from the top soil cell in the step, applied only without snow (LINK-2), e.g. GEOtop's Evap_surface in a fidelity run.")
+	@In
+	@Unit("mm")
+	public Map<Integer, double[]> inEvaporation;
 
 	/*
 	 * RUN HEADER AND OUTPUT
@@ -573,7 +588,11 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Period of the output records [s], aggregated as GEOtop's DtPlotPoint; 0: every step.")
 	@In
 	@Unit("s")
-	public long outputInterval = 0;
+	public double outputInterval = 0.0;
+	@Description("Offset from UTC of the dates in the CSV outputs, e.g. GEOtop's local standard time; the NetCDF time stays UTC.")
+	@In
+	@Unit("h")
+	public double outputStandardTime = 0.0;
 	@Description("Writers to use instead of the default ones of createWriters(), e.g. in tests.")
 	@In
 	public List<SnowSoilOutputWriter> writers;
@@ -846,6 +865,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		if (stabilityCorrection != null && !stabilityCorrection.isBlank()) {
 			processes = withStability(processes, EnumUtils.fromString(StabilityCorrection.class, stabilityCorrection));
 		}
+		processes = GeotopSnowParameters.parse(geotopSnowParameters).apply(processes);
 		SnowThermalConductivity conductivity = snowThermalConductivity == null || snowThermalConductivity.isBlank()
 				? (fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991)
 				: EnumUtils.fromString(SnowThermalConductivity.class, snowThermalConductivity);
@@ -876,6 +896,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("stabilityCorrection", processes.turbulence().parameters().stability().name());
 		attributes.put("maxSnowCells", Integer.toString(capacity));
 		attributes.put("alphaSnow", Double.toString(alphaSnow));
+		if (geotopSnowParameters != null && !geotopSnowParameters.isBlank()) {
+			attributes.put("geotopSnowParameters", geotopSnowParameters.trim());
+		}
 		attributes.put("windHeight", Double.toString(windHeight));
 		attributes.put("temperatureHeight", Double.toString(temperatureHeight));
 		attributes.put("soilWaterMode", EnumUtils.fromString(SoilWaterMode.class, soilWaterMode).name());
@@ -896,7 +919,8 @@ public class SnowSoilSolver1DMain extends HMModel {
 		outRunHeader = new RunHeader(version(), config.name().toLowerCase(), attributes, soilDepth, soilThickness);
 		startController(attributes);
 
-		outputOptions = OutputOptions.of(eos, capacity).everySeconds(outputInterval);
+		outputOptions = OutputOptions.of(eos, capacity).everySeconds(Math.round(outputInterval))
+				.inZone(ZoneOffset.ofTotalSeconds((int) Math.round(outputStandardTime * 3600.0)));
 		if (isVanGenuchten(typeClosureEquation) && isVanGenuchten(typeWaterClosureEquation)) {
 			outputOptions = outputOptions.withSoilWaterContent(SoilWaterContent.vanGenuchten(soil));
 		}
@@ -1172,6 +1196,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 			}
 		}
 		double cos = Math.sin(height);
+		double givenCos = value(inCosIncidence);
+		if (!Double.isNaN(givenCos)) {
+			cos = givenCos;
+		}
 		if (direct > 0.0 && cos <= 0.0) {
 			// the step holds a sliver of daylight but its middle is below the horizon
 			cos = 1e-3;
@@ -1225,13 +1253,20 @@ public class SnowSoilSolver1DMain extends HMModel {
 		default -> 0.0;
 		};
 		double waterBottom = series(inSoilWaterBottomBC, soilWaterBottomValue, "soil water bottom");
+		double[] sinks = null;
+		double evaporation = value(inEvaporation);
+		if (!Double.isNaN(evaporation) && evaporation > 0.0 && solver.snow().isEmpty()) {
+			sinks = new double[soilT.length];
+			sinks[sinks.length - 1] = evaporation;
+		}
+		double nearInfrared = Double.isNaN(groundAlbedoNearInfrared) ? groundAlbedo : groundAlbedoNearInfrared;
 		TopBoundary overSnow = switch (snowTop) {
 		case SURFACE_ENERGY_BALANCE -> null;
 		case DIRICHLET -> new TopBoundary.SurfaceTemperature(
 				series(inSnowTopBC, snowTopValue, "snow top") + MELTING_TEMPERATURE);
 		case NEUMANN -> TopBoundary.SurfaceFlux.constant(series(inSnowTopBC, snowTopValue, "snow top"));
 		};
-		return new StepForcing(surface, snow, rain, groundAlbedo, groundAlbedo, top, bottom, dt, null,
+		return new StepForcing(surface, snow, rain, groundAlbedo, nearInfrared, top, bottom, dt, sinks,
 				precipitationTemperature, waterBottom, overSnow);
 	}
 
