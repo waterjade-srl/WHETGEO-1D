@@ -1,0 +1,121 @@
+/*
+ * Snow and soil column on a synthetic season (GEO2GEO prototype, phase 1).
+ *
+ * A flat point at 46.5 N, 11.35 E, 1500 m; 2 m of sandy loam that freezes,
+ * Richards with free drainage, no heat flux at the bottom; hourly forcing from
+ * 15 November 2025 for 120 days, written by make_inputs.py: air temperature,
+ * relative humidity, wind, global shortwave and total precipitation. Pressure
+ * comes from the elevation, the incoming longwave is estimated as GEOtop does
+ * (cloud transmissivity from the shortwave, Dilley and O'Brien clear sky), the
+ * precipitation is split with GEOtop's linear ramp.
+ *
+ * Run from the root of the repository, with oms-3.5.12.jar FIRST on the
+ * classpath (hm-gears carries an incompatible copy of oms3.dsl):
+ *
+ *   mvn -q -o compile dependency:build-classpath -Dmdep.outputFile=cp.txt
+ *   java -Doms.prj=$PWD/cases/snowsoil/synthetic_season \
+ *        -cp ~/.m2/repository/edu/colostate/omslab/oms/3.5.12/oms-3.5.12.jar:target/classes:$(cat cp.txt) \
+ *        oms3.CLI -r cases/snowsoil/synthetic_season/snowsoil_synthetic_season.sim
+ *
+ * Configuration: "fidelity" (GEOtop 3.0 options) or "recommended". Outputs go
+ * to the writers of SnowSoilSolver1DMain.createWriters() under outputPath.
+ * Negative values in parameter{} go between parentheses (Groovy).
+ */
+import oms3.SimBuilder as OMS3
+
+def startDate = "2025-11-15 01:00"
+def endDate   = "2026-03-15 00:00"
+def timestep  = 60
+
+new OMS3().sim(name: "snowsoil_synthetic_season") {
+
+    model(while: "reader_airT.doProcess") {
+
+        components {
+            "reader_airT"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_rh"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_wind"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_sw"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_prec"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "snowsoil"     "org.geoframe.whetgeo1d.solvers.SnowSoilSolver1DMain"
+        }
+
+        parameter {
+            "reader_airT.file"         "$oms_prj/data/airTemperature.csv"
+            "reader_airT.idfield"      "ID"
+            "reader_airT.tStart"       "${startDate}"
+            "reader_airT.tEnd"         "${endDate}"
+            "reader_airT.tTimestep"    "${timestep}"
+            "reader_airT.fileNovalue"  "-9999.0"
+
+            "reader_rh.file"           "$oms_prj/data/relativeHumidity.csv"
+            "reader_rh.idfield"        "ID"
+            "reader_rh.tStart"         "${startDate}"
+            "reader_rh.tEnd"           "${endDate}"
+            "reader_rh.tTimestep"      "${timestep}"
+            "reader_rh.fileNovalue"    "-9999.0"
+
+            "reader_wind.file"         "$oms_prj/data/windSpeed.csv"
+            "reader_wind.idfield"      "ID"
+            "reader_wind.tStart"       "${startDate}"
+            "reader_wind.tEnd"         "${endDate}"
+            "reader_wind.tTimestep"    "${timestep}"
+            "reader_wind.fileNovalue"  "-9999.0"
+
+            "reader_sw.file"           "$oms_prj/data/shortwave.csv"
+            "reader_sw.idfield"        "ID"
+            "reader_sw.tStart"         "${startDate}"
+            "reader_sw.tEnd"           "${endDate}"
+            "reader_sw.tTimestep"      "${timestep}"
+            "reader_sw.fileNovalue"    "-9999.0"
+
+            "reader_prec.file"         "$oms_prj/data/precipitation.csv"
+            "reader_prec.idfield"      "ID"
+            "reader_prec.tStart"       "${startDate}"
+            "reader_prec.tEnd"         "${endDate}"
+            "reader_prec.tTimestep"    "${timestep}"
+            "reader_prec.fileNovalue"  "-9999.0"
+
+            // configuration (ARCH-6): fidelity or recommended
+            "snowsoil.configuration"          "recommended"
+            "snowsoil.soilWaterMode"          "Richards"
+            "snowsoil.windHeight"             2.0
+            "snowsoil.temperatureHeight"      2.0
+
+            // site
+            "snowsoil.stationID"              1
+            "snowsoil.latitude"               46.5
+            "snowsoil.longitude"              11.35
+            "snowsoil.standardTime"           1.0
+            "snowsoil.elevation"              1500.0
+            "snowsoil.tTimeStep"              3600.0
+
+            // soil grid: WHETGEO-1D CSV inputs (a .gpkg or .nc works too)
+            "snowsoil.soilGridFile"           "$oms_prj/grid"
+
+            // boundary conditions (COL-6)
+            "snowsoil.bareSoilTopType"        "Bulk Transfer"
+            "snowsoil.bareSoilTransfer"       10.0
+            "snowsoil.bottomBCType"           "Bottom No Gradient"
+            "snowsoil.soilWaterBottomType"    "Bottom Free Drainage"
+
+            // precipitation split, GEOtop's ramp [degC]
+            "snowsoil.precipitationPartition" "Geotop Linear"
+            "snowsoil.rainThreshold"          3.0
+            "snowsoil.snowThreshold"          (-1.0)
+
+            // run header: inputs to hash, output location
+            "snowsoil.inputFiles"             "$oms_prj/data/airTemperature.csv,$oms_prj/data/relativeHumidity.csv,$oms_prj/data/windSpeed.csv,$oms_prj/data/shortwave.csv,$oms_prj/data/precipitation.csv"
+            "snowsoil.outputPath"             "$oms_prj/output"
+        }
+
+        connect {
+            "reader_airT.outData"   "snowsoil.inAirTemperature"
+            "reader_rh.outData"     "snowsoil.inRelativeHumidity"
+            "reader_wind.outData"   "snowsoil.inWindSpeed"
+            "reader_sw.outData"     "snowsoil.inShortwaveGlobal"
+            "reader_prec.outData"   "snowsoil.inPrecipitation"
+            "reader_airT.tCurrent"  "snowsoil.inCurrentDate"
+        }
+    }
+}
