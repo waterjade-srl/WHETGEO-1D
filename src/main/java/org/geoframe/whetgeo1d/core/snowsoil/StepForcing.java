@@ -44,10 +44,27 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceForcing;
  *                           the step [kg m-2], bottom first, e.g. from GEOET;
  *                           null for none. Only with soil water; with snow on
  *                           the ground the caller passes none (§6.5, B4)
+ * @param precipitationTemperature temperature of the precipitation given by
+ *                           the forcing [K], NaN for none: where given it
+ *                           replaces the wet-bulb temperature of the
+ *                           recommended rule, with the same limits at 0 °C
+ *                           (SNOW-5); ignored in fidelity
+ * @param soilWaterBottomValue value of the bottom condition of Richards, as
+ *                           in {@code RichardsSolver1D} (ψ [m] for Dirichlet,
+ *                           flux for Neumann; unused with free drainage or
+ *                           an impervious bottom), COL-6
  */
 public record StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
 		double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta,
-		double[] soilWaterSinks) {
+		double[] soilWaterSinks, double precipitationTemperature, double soilWaterBottomValue) {
+
+	/** Forcing with evapotranspiration, no precipitation temperature and a zero bottom value for Richards. */
+	public StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
+			double groundAlbedoNearInfrared, TopBoundary bareSoilTop, double bottomValue, double timeDelta,
+			double[] soilWaterSinks) {
+		this(surface, snowfall, rainfall, groundAlbedoVisible, groundAlbedoNearInfrared, bareSoilTop, bottomValue,
+				timeDelta, soilWaterSinks, Double.NaN, 0.0);
+	}
 
 	/** Forcing without evapotranspiration. */
 	public StepForcing(SurfaceForcing surface, double snowfall, double rainfall, double groundAlbedoVisible,
@@ -70,6 +87,14 @@ public record StepForcing(SurfaceForcing surface, double snowfall, double rainfa
 		}
 		if (!(timeDelta > 0.0) || Double.isInfinite(timeDelta)) {
 			throw new IllegalArgumentException("timeDelta must be positive and finite, got " + timeDelta);
+		}
+		if (!Double.isNaN(precipitationTemperature) && !(precipitationTemperature > 0.0
+				&& Double.isFinite(precipitationTemperature))) {
+			throw new IllegalArgumentException(
+					"precipitationTemperature must be NaN or positive [K], got " + precipitationTemperature);
+		}
+		if (!Double.isFinite(soilWaterBottomValue)) {
+			throw new IllegalArgumentException("soilWaterBottomValue must be finite, got " + soilWaterBottomValue);
 		}
 		if (soilWaterSinks != null) {
 			soilWaterSinks = soilWaterSinks.clone();

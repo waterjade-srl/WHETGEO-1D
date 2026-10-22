@@ -388,14 +388,15 @@ public final class SnowSoilSolver {
 		double soilInputMass;
 		double soilInputEnergy;
 		if (cells.isEmpty()) {
-			double rainTemperature = processes.precipitation().rain(forcing.surface(), Double.NaN);
+			double rainTemperature = processes.precipitation().rain(forcing.surface(), Double.NaN,
+					forcing.precipitationTemperature());
 			soilInputMass = forcing.rainfall();
 			soilInputEnergy = LiquidWaterPercolation.liquidWaterEnergy(forcing.rainfall(), rainTemperature);
 		} else {
 			rainIntoPack = forcing.rainfall();
 			if (rainIntoPack > 0.0) {
 				double rainTemperature = processes.precipitation().rain(forcing.surface(),
-						eos.temperature(cells.get(cells.size() - 1)));
+						eos.temperature(cells.get(cells.size() - 1)), forcing.precipitationTemperature());
 				rainEnergy = LiquidWaterPercolation.liquidWaterEnergy(rainIntoPack, rainTemperature);
 			}
 			Percolated percolated = processes.percolation().apply(cells, dt, rainIntoPack, rainEnergy);
@@ -421,7 +422,7 @@ public final class SnowSoilSolver {
 		if (forcing.snowfall() > 0.0) {
 			SnowCell fresh = FreshSnow.cell(forcing.snowfall(),
 					FreshSnow.geotopDensity(forcing.surface().airTemperature(), forcing.surface().windSpeed()),
-					processes.precipitation().snow(forcing.surface()));
+					processes.precipitation().snow(forcing.surface(), forcing.precipitationTemperature()));
 			snowfallEnergy = fresh.internalEnergy();
 			cells = SnowColumn.depositFreshSnow(cells, fresh, eos);
 		}
@@ -468,7 +469,7 @@ public final class SnowSoilSolver {
 			if (anyFreezing) {
 				water.setSuctions(liquidSuctions);
 			}
-			soilWater = water.step(totalSoilInput, 0.0, heat.soilTemperatures(), anyIce ? ice : null,
+			soilWater = water.step(totalSoilInput, forcing.soilWaterBottomValue(), heat.soilTemperatures(), anyIce ? ice : null,
 					forcing.soilWaterSinks(), dt);
 			double[] newHeatSuctions = soilWater.suctions().clone();
 			for (int i = 0; i < ice.length && anyFreezing; i++) {

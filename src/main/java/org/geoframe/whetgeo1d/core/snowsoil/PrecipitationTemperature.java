@@ -61,6 +61,34 @@ public enum PrecipitationTemperature {
 		return Math.max(wetBulb(forcing), MELTING_TEMPERATURE);
 	}
 
+	/**
+	 * Temperature of the fresh snow [K], with a precipitation temperature from
+	 * the forcing (SNOW-5): in the recommended rule it replaces the wet bulb,
+	 * still capped at 0 °C; GEOtop's rule ignores it.
+	 *
+	 * @param forced precipitation temperature of the forcing [K], NaN for none
+	 */
+	public double snow(SurfaceForcing forcing, double forced) {
+		if (this == GEOTOP || Double.isNaN(forced)) {
+			return snow(forcing);
+		}
+		return Math.min(forced, MELTING_TEMPERATURE);
+	}
+
+	/**
+	 * Temperature of the rain [K], with a precipitation temperature from the
+	 * forcing (SNOW-5): in the recommended rule it replaces the wet bulb, still
+	 * floored at 0 °C; GEOtop's rule ignores it.
+	 *
+	 * @param forced precipitation temperature of the forcing [K], NaN for none
+	 */
+	public double rain(SurfaceForcing forcing, double topTemperature, double forced) {
+		if (this == GEOTOP || Double.isNaN(forced)) {
+			return rain(forcing, topTemperature);
+		}
+		return Math.max(forced, MELTING_TEMPERATURE);
+	}
+
 	private static double wetBulb(SurfaceForcing forcing) {
 		return WetBulbTemperature.of(forcing.airTemperature(), forcing.relativeHumidity(), forcing.pressure());
 	}
