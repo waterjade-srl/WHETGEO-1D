@@ -4,6 +4,7 @@
 #   ./run.sh                      forcing (data/<case>/) and run (output/<case>/) of the four cases
 #   ./run.sh NTGS1_ERA5 ...       only these cases
 #   FORCING_ONLY=1 ./run.sh       only the forcing
+#   LABEL=flag SIM_OPTS="-DonNonConvergence=Flag" ./run.sh NTGS1_JR3QG   a sensitivity run, output/<case>_flag/
 # Prints the wall time of each run and the step rejections the controller logged (SOL-5).
 set -euo pipefail
 export LC_NUMERIC=C
@@ -23,10 +24,12 @@ for c in $CASES; do
   gunzip -kf "$g/meteo0001.txt.gz" "$g/reference.csv.gz"
   java -cp "$CP" org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopForcingFiles "$g/forcing.properties"
   [ -n "${FORCING_ONLY:-}" ] && continue
-  log="$CASE/output/$c.log"
+  log="$CASE/output/$c${LABEL:+_$LABEL}.log"
   start=$(date +%s.%N)
   # oms-3.5.12.jar first: hm-gears carries an incompatible copy of oms3.dsl
-  java -Dcase="$c" -Doms.prj="$CASE" -cp "$OMS_JAR:$CP" oms3.CLI -r "$CASE/snowsoil_canada_ntgs.sim" > "$log" 2>&1
+  # SIM_OPTS: optional -D overrides of the .sim (sensitivity runs), LABEL: suffix of their output folder
+  java -Dcase="$c" ${LABEL:+-Dlabel="$LABEL"} ${SIM_OPTS:-} -Doms.prj="$CASE" -cp "$OMS_JAR:$CP" oms3.CLI \
+       -r "$CASE/snowsoil_canada_ntgs.sim" > "$log" 2>&1
   end=$(date +%s.%N)
   # oms3.CLI exits with 0 even on an error
   if grep -q ">>>> Error" "$log"; then echo "$c: the run failed, see $log" >&2; exit 1; fi

@@ -30,9 +30,16 @@ def longitude = ["NTGS1": -133.773038, "NTGS2": -133.762289][site]
 def elevation = ["NTGS1": 96.0, "NTGS2": 107.0][site]
 def slope     = ["NTGS1": 30.0, "NTGS2": 35.0][site]
 def startDate = "2020-09-01 01:00"
-def endDate   = "2023-09-01 00:00"
+def endDate   = System.getProperty("endDate") ?: "2023-09-01 00:00"
 def timestep  = 60
 def data = "$oms_prj/data/${caseName}"
+// optional overrides for sensitivity runs (not the reference): -DheatTolerance=..., -DonNonConvergence=Flag, -Dlabel=... (output/<case>_<label>/)
+def heatTolerance = (System.getProperty("heatTolerance") ?: "1e-3") as double
+// Flag, not the component's Stop: in NTGS1 JRA-3Q one hour of October 2021 (a saturated peat cell at 0 degC,
+// 0.26-0.42 m) misses the per-cell bound of 1e-3 J m-2 by residuals of 0.006-0.03 J m-2 even at 225 s; the step
+// is accepted, marked degraded and logged (README.md). -DonNonConvergence=Stop restores the default.
+def onNonConvergence = System.getProperty("onNonConvergence") ?: "Flag"
+def label = System.getProperty("label") ? "_" + System.getProperty("label") : ""
 
 new OMS3().sim(name: "snowsoil_canada_ntgs") {
 
@@ -139,6 +146,8 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.windHeight"             10.0
             "snowsoil.temperatureHeight"      10.0
             "snowsoil.alphaSnow"              1e5
+            "snowsoil.heatTolerance"          heatTolerance
+            "snowsoil.onNonConvergence"       onNonConvergence
             "snowsoil.maxSnowCells"           10
             // the case's snow keywords of geotop.inpts (GeotopSnowParameters)
             "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.9, FreshSnowReflNIR=0.65, AlbExtParSnow=10, IrriducibleWatSatSnow=0.02, SnowEmissiv=0.99, SnowRoughness=0.1, DrySnowDefRate=1, WetSnowDefRate=1.5, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=20, SWEtop=20, MaxSnowLayersMiddle=4, PointSlope=${slope}"
@@ -165,7 +174,7 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.bottomBCValue"          0.0
 
             "snowsoil.inputFiles"             "$oms_prj/geotop/${caseName}/forcing.properties,$oms_prj/geotop/${caseName}/meteo0001.txt.gz,$oms_prj/geotop/${caseName}/soil0001.txt,$oms_prj/geotop/${caseName}/reference.csv.gz"
-            "snowsoil.outputPath"             "$oms_prj/output/${caseName}"
+            "snowsoil.outputPath"             "$oms_prj/output/${caseName}${label}"
             "snowsoil.outputInterval"         3600.0
             "snowsoil.outputStandardTime"     0.0
         }
