@@ -299,4 +299,51 @@ public class SnowSoilSolver1DMainTest {
 		double gained = c.solver().soilInternalEnergy() - u1;
 		assertEquals(5.0 * 3600.0 * (steps - 1), gained, 1e-3 * 5.0 * 3600.0 * steps);
 	}
+
+	/**
+	 * Without shortwave but with a cloud transmissivity (the Friuli stations)
+	 * the component takes GEOtop's clear sky times τ<sub>c</sub>: zero at night,
+	 * proportional to τ<sub>c</sub>, about 18 MJ m-2 a day under a clear sky in
+	 * early March at 46.5 N.
+	 */
+	@Test
+	public void shortwaveFromCloudTransmissivity() throws Exception {
+		SnowSoilSolver1DMain clear = cloudyComponent(1.0);
+		SnowSoilSolver1DMain cloudy = cloudyComponent(0.6);
+		java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+		long t0 = java.time.LocalDateTime.of(2026, 3, 1, 0, 0).toEpochSecond(java.time.ZoneOffset.UTC);
+		double daily = 0.0;
+		for (int k = 1; k <= 24; k++) {
+			String date = java.time.LocalDateTime.ofEpochSecond(t0 + 3600L * k, 0, java.time.ZoneOffset.UTC).format(f);
+			clear.inCurrentDate = date;
+			clear.solve();
+			cloudy.inCurrentDate = date;
+			cloudy.solve();
+			assertEquals(0.6 * clear.outShortwaveGlobal, cloudy.outShortwaveGlobal, 1e-9);
+			assertEquals(0.6, cloudy.outCloudTransmissivity, 0.0);
+			if (k <= 4 || k >= 20) {
+				assertEquals("hour " + k, 0.0, clear.outShortwaveGlobal, 0.0);
+			}
+			if (k >= 10 && k <= 13) {
+				assertTrue("hour " + k + ": " + clear.outShortwaveGlobal, clear.outShortwaveGlobal > 400.0);
+			}
+			daily += clear.outShortwaveGlobal * 3600.0;
+		}
+		clear.close();
+		cloudy.close();
+		assertTrue("daily " + daily, daily > 14e6 && daily < 22e6);
+	}
+
+	private static SnowSoilSolver1DMain cloudyComponent(double tau) {
+		SnowSoilSolver1DMain c = caseComponent("recommended", "Fixed", new RecordingWriter());
+		c.inputFiles = "";
+		c.inAirTemperature = constant(2.0);
+		c.inRelativeHumidity = constant(70.0);
+		c.inWindSpeed = constant(2.0);
+		c.inPressure = constant(85000.0);
+		c.inPrecipitation = constant(0.0);
+		c.inCloudTransmissivity = constant(tau);
+		c.clearSkyEmissivity = "Konzelmann 1994";
+		return c;
+	}
 }

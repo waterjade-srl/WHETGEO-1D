@@ -127,7 +127,12 @@ import oms3.annotations.Unit;
  * {@code elevation} ({@link StandardAtmosphere});</li>
  * <li>shortwave on the horizontal [W m-2], either beam and diffuse, or
  * global, split into beam and diffuse with Erbs' diffuse fraction of
- * τ<sub>c</sub> τ<sub>atm</sub> as GEOtop ({@link CloudTransmissivity});</li>
+ * τ<sub>c</sub> τ<sub>atm</sub> as GEOtop ({@link CloudTransmissivity}); with
+ * no shortwave at all but a cloud transmissivity {@code inCloudTransmissivity},
+ * the clear-sky shortwave of GEOtop times τ<sub>c</sub> (clamped to [0, 1]),
+ * split the same way, as GEOtop does with a {@code CloudTrans} column and no
+ * radiation ({@code find_actual_cloudiness}, {@code radiation.cc:1065-1154};
+ * {@code shortwave_radiation}, {@code radiation.cc:320-356});</li>
  * <li>incoming longwave [W m-2]; where missing, estimated as GEOtop from the
  * air and the averaged cloud transmissivity ({@link IncomingLongwave}), which
  * is taken from {@code inCloudTransmissivity} [-] if given, otherwise from the
@@ -611,6 +616,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Unit("-")
 	public double outCloudTransmissivity;
 	@Out
+	@Description("Shortwave on the horizontal used in the step, beam plus diffuse, measured or estimated.")
+	@Unit("W m-2")
+	public double outShortwaveGlobal;
+	@Out
 	public SnowSoilStepResult outStepResult;
 	@Out
 	public RunHeader outRunHeader;
@@ -1021,6 +1030,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 			direct = Math.max(0.0, direct);
 			diffuse = Math.max(0.0, diffuse);
 			stepTau = clouds.fromBeamAndDiffuse(jdBegin, jdEnd, jdMid, direct, diffuse, p, rh, ta);
+		} else if (Double.isNaN(value(inShortwaveGlobal)) && !Double.isNaN(value(inCloudTransmissivity))) {
+			// no shortwave measured: GEOtop's clear sky times the given cloud transmissivity
+			stepTau = Math.max(0.0, Math.min(1.0, value(inCloudTransmissivity)));
+			double global = stepTau * clouds.clearSkyShortwave(jdBegin, jdEnd, jdMid, p, rh, ta);
+			double kd = CloudTransmissivity.diffuseFraction(
+					stepTau * clouds.atmosphericTransmissivity(jdBegin, jdEnd, jdMid, p, rh, ta));
+			diffuse = kd * global;
+			direct = global - diffuse;
 		} else {
 			double global = Math.max(0.0, required(inShortwaveGlobal, "shortwave (global, or direct and diffuse)"));
 			stepTau = clouds.fromGlobal(jdBegin, jdEnd, jdMid, global, p, rh, ta);
@@ -1053,6 +1070,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		outPressure = p;
 		outLongwaveIn = lw;
 		outCloudTransmissivity = tau;
+		outShortwaveGlobal = direct + diffuse;
 		SurfaceForcing surface = new SurfaceForcing(direct, diffuse, Math.max(0.0, Math.min(1.0, cos)), lw, ta, rh,
 				wind, p);
 

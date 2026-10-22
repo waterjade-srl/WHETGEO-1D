@@ -114,6 +114,17 @@ public class ForcingEstimatesTest {
 		assertEquals(0.5 * clear + 0.5, IncomingLongwave.atmosphereEmissivity(clear, 0.5), 1e-15);
 	}
 
+	/** Konzelmann (1994) with GEOtop's default coefficients ({@code radiation.cc:514-517}). */
+	@Test
+	public void konzelmannAsGeotop() {
+		double t = 268.15;
+		double e = 400.0; // Pa
+		assertEquals(0.23 + 0.484 * Math.pow(e / t, 1.0 / 8.0),
+				IncomingLongwave.ClearSkyEmissivity.KONZELMANN_1994.emissivity(e, t), 1e-15);
+		assertEquals(IncomingLongwave.ClearSkyEmissivity.KONZELMANN_1994, org.geoframe.whetgeo1d.core.utils.EnumUtils
+				.fromString(IncomingLongwave.ClearSkyEmissivity.class, "Konzelmann 1994"));
+	}
+
 	@Test
 	public void rainSnowSplitConservesTheTotal() {
 		PrecipitationPartition.GeotopLinear g = PrecipitationPartition.GeotopLinear.geotop();
