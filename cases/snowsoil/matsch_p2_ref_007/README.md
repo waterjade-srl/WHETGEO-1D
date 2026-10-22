@@ -87,9 +87,9 @@ The soil and its conditions:
 
 ## Result
 
-The run takes 3068 steps, every heat solve converges, and it runs in about 8 s. The full comparison against the proposed VAL-1 tolerances is in the notebook. In short:
+The run takes 3068 steps, every heat solve converges, and it runs in about 8 s. The full comparison against the VAL-1 tolerances, approved on 22 October 2026, is in the notebook. In short:
 
-- **Within the proposed tolerances:**
+- **Within the tolerances:**
   - SWE: RMSE 0.02 mm, peak −8 %;
   - HS: RMSE 1.7 mm;
   - LWnet with snow;
