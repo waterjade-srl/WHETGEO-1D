@@ -9,3 +9,6 @@ build/
 
 # outputs of the example cases
 cases/*/*/output/
+
+# python caches
+__pycache__/

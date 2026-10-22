@@ -40,7 +40,9 @@ import org.geoframe.whetgeo1d.snow.surface.SaturationCurve;
  * The clear-sky emissivities are GEOtop's {@code LWinParameterization}
  * formulas with the vapour pressure in mbar and T in K, as GEOtop writes them;
  * Dilley and O'Brien (1998), GEOtop's default, is the default here. Konzelmann
- * (1994), which needs two calibrated coefficients, is not ported.
+ * (1994) has two calibrated coefficients; it is here with GEOtop's defaults,
+ * k<sub>1</sub> = 0.484 and k<sub>2</sub> = 8 ({@code parameters.cc:2227-2228}),
+ * the option of the Friuli case.
  */
 public final class IncomingLongwave {
 
@@ -61,6 +63,12 @@ public final class IncomingLongwave {
 		KOENIG_LANGLO_AUGSTEIN_1994,
 		/** Andreas and Ackley (1982), GEOtop 6. */
 		ANDREAS_ACKLEY_1982,
+		/**
+		 * Konzelmann et al. (1994), GEOtop 7, 0.23 + k<sub>1</sub> (e/T)<sup>1/k<sub>2</sub></sup>
+		 * with e in Pa and GEOtop's default k<sub>1</sub> = 0.484, k<sub>2</sub> = 8
+		 * ({@code radiation.cc:514-517}).
+		 */
+		KONZELMANN_1994,
 		/** Prata (1996), GEOtop 8. */
 		PRATA_1996,
 		/** Dilley and O'Brien (1998), GEOtop 9, GEOtop's default. */
@@ -83,6 +91,7 @@ public final class IncomingLongwave {
 			}
 			case KOENIG_LANGLO_AUGSTEIN_1994 -> 0.765;
 			case ANDREAS_ACKLEY_1982 -> 0.601 + 5.95e-5 * e * Math.exp(1500.0 / t);
+			case KONZELMANN_1994 -> 0.23 + 0.484 * Math.pow(e * 100.0 / t, 1.0 / 8.0);
 			case PRATA_1996 -> 1.0 - (1.0 + 46.5 * e / t) * Math.exp(-Math.sqrt(1.2 + 3.0 * 46.5 * e / t));
 			case DILLEY_OBRIEN_1998 -> (59.38 + 113.7 * Math.pow(t / 273.16, 6.0)
 					+ 96.96 * Math.sqrt((465.0 * e / t) / 25.0)) / (5.67e-8 * Math.pow(t, 4));

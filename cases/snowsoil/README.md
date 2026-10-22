@@ -93,14 +93,14 @@ Each forcing is an OMS time series (`HashMap<Integer,double[]>`, keyed by `stati
 | `inPressure` | Pa | GEOtop's standard atmosphere at `elevation`, P = 101325 e^(−z/8500) |
 | `inShortwaveDirect` + `inShortwaveDiffuse` | W m⁻² | `inShortwaveGlobal`, split into beam and diffuse as GEOtop (Erbs, from the cloud transmissivity) |
 | `inLongwaveIn` | W m⁻² | GEOtop's estimate (see below) |
-| `inCloudTransmissivity` | – | used by the longwave estimate if given |
+| `inCloudTransmissivity` | – | used by the longwave estimate if given; with no shortwave at all, the shortwave is GEOtop's clear sky times τ_c (as GEOtop with a `CloudTrans` column and no radiation) |
 | `inRainfall` + `inSnowfall` | mm per step | `inPrecipitation` split by `precipitationPartition` |
 | `inPrecipitationTemperature` | °C | wet-bulb temperature (recommended only; fidelity ignores it) |
 
 How the longwave is estimated when it is missing:
 
 - ε_a = ε_clear τ_c + 1 − τ_c.
-- ε_clear comes from `clearSkyEmissivity`; the default `Dilley OBrien 1998` is GEOtop's default.
+- ε_clear comes from `clearSkyEmissivity`; the default `Dilley OBrien 1998` is GEOtop's default. GEOtop's `LWinParameterization` 1–9 are all available; `Konzelmann 1994` (7) uses GEOtop's default coefficients k1 = 0.484, k2 = 8.
 - τ_c is the measured shortwave over Iqbal's clear sky, averaged over the daylight steps of the last 24 h and held through the night.
 - This average is causal, so it differs from GEOtop's series. GEOtop's exact series is `DailyCloudiness.geotopSeries`; precompute it and pass it as `inCloudTransmissivity` if you need it.
 - Before the first daylight step, τ_c = `defaultCloudTransmissivity`.
@@ -175,3 +175,10 @@ Every output starts with the run header:
 To read the outputs, open `Jupyter_Notebook/5_WHETGEO1D_SnowSoil_Outputs.ipynb`. Its helpers are in `Jupyter_Notebook/WHETGEO1D_SnowSoilOutputs.py`: `read_netcdf`, `read_header`, `read_csv`, `plot_snow_cells`, `plot_soil_profile`.
 
 For chaining with other components, the main results are also `@Out` fields: `outSnowWaterEquivalent`, `outSnowDepth`, `outSnowCells`, `outSurfaceTemperature`, `outSoilTemperature`, `outSoilSuction`, `outSoilIce`, `outSoilInput`, `outRainfall`, `outSnowfall`, `outPressure`, `outLongwaveIn`, `outCloudTransmissivity`, `outStepResult`, `outRunHeader` and `outRunDiagnostics`.
+
+The component prints every rejected step (`snowsoil: heat not accepted at t = ...`) and, at the end, a summary line: steps, accepted solver steps, rejected, degraded.
+
+## Cases
+
+- `synthetic_season/`: the synthetic season of the example above.
+- `friuli/`: four stations of the Friuli Venezia Giulia network, 1 November 2025 – 1 May 2026, recommended configuration, heat only, against the observed snow depth (VAL-3). `make_inputs.py` writes the forcing from the SMET files of the MobyGIS-GEOtop run, `run_all.sh` runs the four stations (`-Dstation=n` in the `.sim`), `friuli_comparison.ipynb` compares with the observations, GEOtop 3.0 and MobyGIS (`compare.py`).
