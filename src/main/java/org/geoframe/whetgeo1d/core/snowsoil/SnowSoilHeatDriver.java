@@ -103,6 +103,8 @@ public final class SnowSoilHeatDriver {
 	private final SnowInternalEnergy snowClosure;
 	private final InterfaceConductivity snowFaceConductivity = new InterfaceConductivityWeightedHarmonicMean();
 	private final SingleCellHeatSolver singleCellSolver = new SingleCellHeatSolver();
+	/** Active-cell index of the largest residual ratio of the last check, -1 before any step. */
+	private int worstCell = -1;
 
 	/**
 	 * @param soil       soil part of the column, its temperatures are the initial
@@ -166,6 +168,28 @@ public final class SnowSoilHeatDriver {
 					"expected " + column.soilCells() + " soil temperatures, got " + temperatures.length);
 		}
 		System.arraycopy(temperatures, 0, column.variables().temperatures, 0, temperatures.length);
+	}
+
+	/**
+	 * Restores the soil suctions the heat closures read, for instance to roll a
+	 * step back ({@link SnowSoilSolver#restore}).
+	 *
+	 * @param suctions [m], bottom first, one per soil cell
+	 */
+	public void setSoilSuctions(double[] suctions) {
+		if (suctions.length != column.soilCells()) {
+			throw new IllegalArgumentException("expected " + column.soilCells() + " soil suctions, got " + suctions.length);
+		}
+		System.arraycopy(suctions, 0, column.variables().waterSuctions, 0, suctions.length);
+	}
+
+	/**
+	 * Index among the active cells (0 at the bottom, soil first) of the cell
+	 * with the largest residual ratio in the last per-cell check, the one named
+	 * when a step is rejected (SOL-5); -1 before the first step.
+	 */
+	public int worstCell() {
+		return worstCell;
 	}
 
 	/** Equation-state ids of the soil cells, bottom first. */
@@ -322,6 +346,11 @@ public final class SnowSoilHeatDriver {
 			x = next;
 		}
 		return x;
+	}
+
+	/** Largest number of snow cells the column holds. */
+	public int snowCapacity() {
+		return column.capacity() - column.soilCells();
 	}
 
 	/** Number of soil cells. */
@@ -568,6 +597,7 @@ public final class SnowSoilHeatDriver {
 		double[] lambda = variables.lambdasInterface;
 		double[] distance = column.geometry().spaceDeltaZ;
 		double worst = 0.0;
+		worstCell = 0;
 		for (int i = 0; i < n; i++) {
 			double residual = newEnergy[i] - oldEnergy[i] - timeDelta * (fluxes[i] - fluxes[i + 1]);
 			double scale = Math.abs(newEnergy[i]) + Math.abs(oldEnergy[i])
@@ -581,7 +611,11 @@ public final class SnowSoilHeatDriver {
 					variables.waterSuctions[i], variables.parameterID[i], i) + timeDelta * (below + above);
 			double bound = settings.absoluteTolerance()
 					+ settings.roundOffSafety() * EPSILON * (scale + Math.abs(slope * variables.temperatures[i]));
-			worst = Math.max(worst, Math.abs(residual) / bound);
+			double ratio = Math.abs(residual) / bound;
+			if (ratio > worst) {
+				worstCell = i;
+			}
+			worst = Math.max(worst, ratio);
 		}
 		return worst;
 	}

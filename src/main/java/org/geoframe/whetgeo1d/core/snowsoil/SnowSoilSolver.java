@@ -114,6 +114,7 @@ public final class SnowSoilSolver {
 	private List<SnowCell> snow;
 	private double surfaceAge;
 	private double pendingSurfaceEnergy;
+	private ColumnStepTerms lastTerms;
 
 	/**
 	 * @param soil        soil part of the column, with its initial temperatures
@@ -277,6 +278,69 @@ public final class SnowSoilSolver {
 		return pendingSurfaceEnergy;
 	}
 
+	/** Whether the soil has Richards (soil water), not a fixed suction. */
+	public boolean hasSoilWater() {
+		return water != null;
+	}
+
+	/**
+	 * The complete state the next step reads (ARCH-5, SOL-5), copied: see
+	 * {@link SnowSoilState} for what it holds and why that is all.
+	 */
+	public SnowSoilState snapshot() {
+		return new SnowSoilState(snow, surfaceAge, pendingSurfaceEnergy, heat.soilTemperatures(),
+				heat.soilSuctions(), water == null ? null : water.suctions(), totalSuctions);
+	}
+
+	/**
+	 * Puts the solver back in a state taken by {@link #snapshot()}, from this
+	 * solver (rollback of a rejected step, SOL-5) or from another one built
+	 * with the same configuration (restart, ARCH-5). The next step is then the
+	 * same, to the bit, as the step that followed the snapshot.
+	 *
+	 * @throws IllegalArgumentException if the state does not fit the column:
+	 *                                  another number of soil cells, soil water
+	 *                                  where there is none or the reverse, or
+	 *                                  more snow cells than the capacity
+	 */
+	public void restore(SnowSoilState state) {
+		Objects.requireNonNull(state, "state");
+		if (state.soilCells() != totalSuctions.length) {
+			throw new IllegalArgumentException(
+					"state has " + state.soilCells() + " soil cells, the column " + totalSuctions.length);
+		}
+		if ((state.soilWaterSuctions() == null) != (water == null)) {
+			throw new IllegalArgumentException(water == null ? "state has soil water, the column has none"
+					: "state has no soil water, the column has");
+		}
+		if (state.snow().size() > heat.snowCapacity()) {
+			throw new IllegalArgumentException(
+					"state has " + state.snow().size() + " snow cells, capacity " + heat.snowCapacity());
+		}
+		if (!(state.surfaceAge() >= 0.0) || Double.isInfinite(state.surfaceAge())) {
+			throw new IllegalArgumentException("surface age must be non-negative and finite, got " + state.surfaceAge());
+		}
+		snow = state.snow();
+		surfaceAge = state.surfaceAge();
+		pendingSurfaceEnergy = state.pendingSurfaceEnergy();
+		heat.setSoilTemperatures(state.soilTemperatures());
+		heat.setSoilSuctions(state.soilHeatSuctions());
+		if (water != null) {
+			water.setSuctions(state.soilWaterSuctions());
+		}
+		System.arraycopy(state.totalSuctions(), 0, totalSuctions, 0, totalSuctions.length);
+		lastTerms = null;
+	}
+
+	/**
+	 * Terms of the last step that {@link SnowSoilStepResult} does not carry,
+	 * for the whole-column balance and the acceptance of the step; null before
+	 * the first step and after {@link #restore}.
+	 */
+	public ColumnStepTerms lastStepTerms() {
+		return lastTerms;
+	}
+
 	/** Advances the column by one step. */
 	public SnowSoilStepResult step(StepForcing forcing) {
 		Objects.requireNonNull(forcing, "forcing");
@@ -348,6 +412,12 @@ public final class SnowSoilSolver {
 			surfaceConverged = Math.abs(temperatures[temperatures.length - 1] - linearisedAt) <= processes
 					.surfaceCoupling().temperatureTolerance();
 		}
+		double surfaceChange = Double.NaN;
+		if (snowAtStart) {
+			double[] temperatures = heatStep.temperatures();
+			surfaceChange = Math.abs(temperatures[temperatures.length - 1] - linearisedAt);
+		}
+		int heatWorstCell = heat.worstCell();
 		List<SnowCell> cells = heatStep.snow();
 		double heatEnergy = SnowColumn.internalEnergy(cells) - energyBefore;
 		double melt = ice(start) - ice(cells);
@@ -361,6 +431,7 @@ public final class SnowSoilSolver {
 		double unmetVapour = 0.0;
 		double toSoilMass = 0.0;
 		double toSoilEnergy = 0.0;
+		double phaseMismatch = 0.0;
 		if (snowAtStart) {
 			double[] temperatures = heatStep.temperatures();
 			surfaceTemperature = temperatures[temperatures.length - 1];
@@ -374,7 +445,8 @@ public final class SnowSoilSolver {
 			vapourEnergy = sublimated.exchangedEnergy();
 			unmetVapour = Math.abs(sublimated.unmetMass());
 			toSoilEnergy += sublimated.residualEnergy();
-			pendingSurfaceEnergy -= sublimated.phaseMismatchEnergy();
+			phaseMismatch = sublimated.phaseMismatchEnergy();
+			pendingSurfaceEnergy -= phaseMismatch;
 		}
 
 		// 5: compaction and melt shrinkage, against the ice at the start of the step
@@ -430,6 +502,7 @@ public final class SnowSoilSolver {
 		double totalSoilInput = soilInputMass + toSoilMass;
 		double totalSoilInputEnergy = soilInputEnergy + toSoilEnergy;
 		SoilWaterStepResult soilWater = null;
+		double infiltrationEnergy = Double.NaN;
 		double soilDrainageEnergy = Double.NaN;
 		double soilEnergyClosure = Double.NaN;
 		double soilStorageHeat = Double.NaN;
@@ -489,6 +562,7 @@ public final class SnowSoilSolver {
 							+ (totalSoilInputEnergy / totalSoilInput - LATENT_HEAT_FUSION) / SPECIFIC_HEAT_WATER)
 					: 0.0;
 			soilSinkEnergy = heat.sinkEnergy(soilWater.sinks());
+			infiltrationEnergy = topEnergy;
 			soilDrainageEnergy = heat.transportSoilWater(newHeatSuctions, soilWater.faceWater(), topEnergy, oldExcess,
 					newExcess, soilWater.sinks());
 			double[] fluxes = heatStep.conductiveFluxes();
@@ -498,6 +572,8 @@ public final class SnowSoilSolver {
 		}
 
 		snow = cells;
+		lastTerms = new ColumnStepTerms(pendingApplied, phaseMismatch, surfaceChange, heatWorstCell, soilInputMass,
+				soilInputEnergy, infiltrationEnergy, soilSinkEnergy);
 		SnowBudget budget = SnowBudget.of(massBefore, SnowColumn.totalMass(cells), forcing.snowfall(), rainIntoPack,
 				vapour, toSoilMass, energyBefore, SnowColumn.internalEnergy(cells), heatEnergy, snowfallEnergy,
 				rainEnergy, vapourEnergy, toSoilEnergy);
