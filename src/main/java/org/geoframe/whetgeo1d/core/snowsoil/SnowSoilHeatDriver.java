@@ -201,6 +201,11 @@ public final class SnowSoilHeatDriver {
 		return column.variables().lambdas[nSoil - 1];
 	}
 
+	/** Distance from the centre of the top soil cell to the soil surface, half its thickness [m]. */
+	public double topSoilHalfCell() {
+		return column.soilTopHalfCell();
+	}
+
 	/** Current soil temperatures [K], bottom first. */
 	public double[] soilTemperatures() {
 		return Arrays.copyOf(column.variables().temperatures, column.soilCells());
@@ -420,6 +425,9 @@ public final class SnowSoilHeatDriver {
 	 */
 	public HeatStepResult step(List<SnowCell> snow, TopBoundary top, double bottomValue, double timeDelta) {
 		Objects.requireNonNull(top, "top");
+		if (top instanceof TopBoundary.SurfaceBalance) {
+			throw new IllegalArgumentException("a surface balance is coupled by SnowSoilSolver, not by the heat driver");
+		}
 		if (!(timeDelta > 0.0) || Double.isInfinite(timeDelta)) {
 			throw new IllegalArgumentException("timeDelta must be positive, got " + timeDelta);
 		}

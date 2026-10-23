@@ -64,6 +64,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.IncomingLongwave;
 import org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopSnowParameters;
 import org.geoframe.whetgeo1d.core.snowsoil.BareSoilEnergyBalance;
+import org.geoframe.whetgeo1d.core.snowsoil.SkinNode;
 import org.geoframe.whetgeo1d.core.snowsoil.SoilWaterDriver;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
@@ -638,9 +639,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	/*
 	 * STEP CONTROL AND RESTART (SOL-5, ARCH-5)
 	 */
-	@Description("Experimental: a skin node over snow as GEOtop's default surface node (SnowSoilSolver.setSkin); off by default.")
+	@Description("Skin node of the surface balance, over snow and bare soil (SURF-1/2): None, Geotop (re-solved without the skin above 0 degC over snow) or Capped (held at 0 degC over snow); empty: Geotop in fidelity, Capped in recommended.")
 	@In
-	public boolean experimentalSkin = false;
+	public String skinNode = "";
 
 	@Description("Halvings of a step that does not converge before giving up (SOL-5).")
 	@In
@@ -727,8 +728,6 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private BareSoilEnergyBalance bareSoilBalance;
 	private BareSoilEnergyBalance.Step bareSoilStep;
 	private double bareSoilStartTemperature;
-	private double bareSoilSkin = Double.NaN;
-	private double bareSoilConductance;
 	private SoilWaterContent topWaterContent;
 	private double topThetaR;
 	private double topThetaS;
@@ -756,13 +755,13 @@ public class SnowSoilSolver1DMain extends HMModel {
 		outRunDiagnostics = controller.diagnostics();
 		SurfaceFluxes bareSoil = null;
 		double skin = Double.NaN;
-		if (bareSoilStep != null && result.surface() == null) {
-			double[] t = solver.soilTemperatures();
-			skin = bareSoilStep.skinTemperature(bareSoilBalance, bareSoilStartTemperature, t[t.length - 1],
-					bareSoilConductance);
-			bareSoil = bareSoilStep.evaluate(bareSoilBalance, skin);
+		SnowSoilSolver.SurfaceSolution surfaceSolution = solver.lastSurface();
+		if (bareSoilStep != null && result.surface() == null && surfaceSolution != null
+				&& !surfaceSolution.overSnow() && surfaceSolution.fluxes() != null) {
+			// the skin (or the top cell) and the balance of the bare soil, as the solver coupled them
+			skin = surfaceSolution.surfaceTemperature();
+			bareSoil = surfaceSolution.fluxes();
 		}
-		bareSoilSkin = skin;
 		outBareSoilFluxes = bareSoil;
 		for (SnowSoilOutputWriter writer : activeWriters) {
 			writer.bareSoilSurface(bareSoil, skin);
@@ -952,6 +951,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 					c.maxIceVolumeFraction(), c.dryDeformationRate(), c.densityCutoff(), c.wetDeformationRate(),
 					c.viscosity(), c.minimumIceMass(), geotopCap), processes.equationOfState()));
 		}
+		if (skinNode != null && !skinNode.isBlank()) {
+			processes = processes.withSkin(EnumUtils.fromString(SkinNode.class, skinNode.trim()));
+		}
 		SnowThermalConductivity conductivity = snowThermalConductivity == null || snowThermalConductivity.isBlank()
 				? (fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991)
 				: EnumUtils.fromString(SnowThermalConductivity.class, snowThermalConductivity);
@@ -968,7 +970,6 @@ public class SnowSoilSolver1DMain extends HMModel {
 		NewtonSettings newton = new NewtonSettings(heatTolerance, NewtonSettings.defaults().roundOffSafety(),
 				heatMaxIterations, heatPicardIterations);
 		solver = new SnowSoilSolver(soil, water, heat, bottomType, newton, processes, List.of(), 0.0);
-		solver.setSkin(experimentalSkin);
 
 		site = SolarGeometry.ofDegrees(latitude, longitude, standardTime);
 		clouds = CloudTransmissivity.flat(site);
@@ -1000,9 +1001,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("stabilityCorrection", processes.turbulence().parameters().stability().name());
 		attributes.put("maxSnowCells", Integer.toString(capacity));
 		attributes.put("alphaSnow", Double.toString(alphaSnow));
-		if (experimentalSkin) {
-			attributes.put("experimentalSkin", "true");
-		}
+		attributes.put("skinNode", processes.skin().name());
 		if (geotopSnowParameters != null && !geotopSnowParameters.isBlank()) {
 			attributes.put("geotopSnowParameters", geotopSnowParameters.trim());
 		}
@@ -1176,7 +1175,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 				t.maxIterations(), t.minimumWindSpeed(), t.maximumResistance(), t.capVapourResistance()));
 		return new SnowProcesses(p.equationOfState(), p.surfaceBalance(), turbulence, p.albedo(), p.restoringSnowfall(),
 				p.compaction(), p.slopeAngle(), p.percolation(), p.sublimationThickness(), p.restratification(),
-				p.precipitation(), p.surfaceCoupling(), p.thinSnow());
+				p.precipitation(), p.surfaceCoupling(), p.thinSnow(), p.skin());
 	}
 
 	private List<String> inputFileList() {
@@ -1360,9 +1359,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		evaporation = Double.isNaN(evaporation) ? 0.0 : Math.max(0.0, evaporation);
 		bareSoilStep = null;
 		if (bareSoilTop == BareSoilTop.ENERGY_BALANCE) {
-			// the skin of the previous step, or the top cell after snow or at the start
-			bareSoilStartTemperature = Double.isNaN(bareSoilSkin) ? soilT[soilT.length - 1] : bareSoilSkin;
-			bareSoilConductance = solver.topSoilConductivity() / spaceDeltaZ[spaceDeltaZ.length - 1];
+			// resistances at the top cell at the start of the step, where GEOtop restarts its skin
+			// (energy.balance.cc:732); the skin itself is coupled by the solver (SURF-2)
+			bareSoilStartTemperature = soilT[soilT.length - 1];
 			double saturation = 1.0;
 			if (topWaterContent != null) {
 				double[] theta = topWaterContent.liquid(solver);
@@ -1377,8 +1376,11 @@ public class SnowSoilSolver1DMain extends HMModel {
 		case NEUMANN -> TopBoundary.SurfaceFlux.constant(series(inTopBC, bareSoilTopValue, "bare-soil top"));
 		case BULK_TRANSFER -> new TopBoundary.SurfaceFlux(bareSoilTransfer * (ta - soilT[soilT.length - 1]),
 				-bareSoilTransfer);
-		case ENERGY_BALANCE -> bareSoilStep.topBoundary(bareSoilBalance, bareSoilStartTemperature,
-				soilT[soilT.length - 1], bareSoilConductance);
+		case ENERGY_BALANCE -> {
+			BareSoilEnergyBalance.Step step = bareSoilStep;
+			BareSoilEnergyBalance soilBalance = bareSoilBalance;
+			yield new TopBoundary.SurfaceBalance(t -> step.evaluate(soilBalance, t));
+		}
 		};
 		double bottom = switch (bottomType) {
 		case BOTTOM_DIRICHLET -> series(inBottomBC, bottomBCValue, "bottom") + MELTING_TEMPERATURE;

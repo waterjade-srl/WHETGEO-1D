@@ -18,10 +18,16 @@
  */
 package org.geoframe.whetgeo1d.core.snowsoil;
 
+import java.util.Objects;
+
+import org.geoframe.whetgeo1d.snow.surface.SurfaceFluxes;
+
 /**
- * Condition at the top of the snow+soil column for one heat step. Phase 1 has
- * the two linear options only; the nonlinear skin boundary (specification
- * §3.5, A17) needs a change to NestedNewtonThomas and is not here.
+ * Condition at the top of the snow+soil column for one heat step. The heat
+ * driver takes the two linear options; a nonlinear surface balance
+ * ({@link SurfaceBalance}, the bare soil without snow) is coupled by the
+ * {@link SnowSoilSolver}, through the skin node or at the top cell
+ * ({@link SkinNode}), into a linear flux of the driver.
  */
 public sealed interface TopBoundary {
 
@@ -62,5 +68,26 @@ public sealed interface TopBoundary {
 		public static SurfaceFlux constant(double flux) {
 			return new SurfaceFlux(flux, 0.0);
 		}
+	}
+
+	/**
+	 * A surface energy balance at the top of the bare soil, nonlinear in the
+	 * surface temperature, with its resistances frozen over the step (SOL-2):
+	 * the {@link SnowSoilSolver} couples it like the balance over snow, through
+	 * the skin node of {@link SnowProcesses#skin()} (no 0 °C rule on soil) or at
+	 * the top cell. Not taken by the heat driver directly.
+	 *
+	 * @param balance EB(T) and EB'(T), positive into the column
+	 */
+	record SurfaceBalance(Balance balance) implements TopBoundary {
+		public SurfaceBalance {
+			Objects.requireNonNull(balance, "balance");
+		}
+	}
+
+	/** EB(T) [W m-2] and dEB/dT ≤ 0 of a surface at temperature T [K], as {@link SurfaceFluxes}. */
+	@FunctionalInterface
+	interface Balance {
+		SurfaceFluxes evaluate(double temperature);
 	}
 }

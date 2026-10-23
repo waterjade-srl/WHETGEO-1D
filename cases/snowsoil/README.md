@@ -56,6 +56,7 @@ Names are the component's fields: set them in `parameter{}` as `"snowsoil.<name>
 | `stabilityCorrection` | by configuration | `Both`, `Unstable only` (GEOtop `MoninObukhov = 2`), `Stable only`, `Neutral` |
 | `maxSnowCells` | 10 / 11 | capacity of snow cells above the soil |
 | `alphaSnow` | 1e5 | smoothing of the snow equation of state |
+| `skinNode` | by configuration | skin node of the surface balance over snow and bare soil (SURF-1/2), eliminated in the solver: `Geotop` (fidelity: as GEOtop, the step solved again without the skin when it rises above 0 °C over snow), `Capped` (recommended: the skin held at 0 °C over snow, the surplus melts the top cell), `None` (the surface is the top cell; sensitivity) |
 | `windHeight`, `temperatureHeight` | 2, 2 m | measurement heights |
 | `groundAlbedo` | 0.2 | albedo of the soil under thin snow |
 | `heatTolerance`, `heatMaxIterations`, `heatPicardIterations` | 1e-3 J m⁻², 50, 1 | Newton settings of the heat step |
@@ -124,7 +125,7 @@ Every value is either a constant (`...Value`) or a time series (`in...`). Where 
 | Where | Option | Choices | Value |
 |---|---|---|---|
 | heat, top of the snow | `snowTopType` | `Surface Energy Balance` (default), `Dirichlet`, `Neumann` | `snowTopValue` / `inSnowTopBC`: °C (capped at 0 °C over snow) or W m⁻² into the snow |
-| heat, top of bare soil | `bareSoilTopType` | `Bulk Transfer` (default, h (Ta − T_top) with h = `bareSoilTransfer`), `Dirichlet`, `Neumann`, `Energy Balance` (GEOtop 3.0's bare-soil balance through a skin node: `groundAlbedo`/`groundAlbedoNearInfrared` dry, `groundAlbedoWet`/`groundAlbedoNearInfraredWet` saturated, `soilEmissivity` 0.96, `soilRoughness` 0.01 m; latent heat of the evaporation given in `inEvaporation`) | `bareSoilTopValue` / `inTopBC`: °C or W m⁻² into the soil |
+| heat, top of bare soil | `bareSoilTopType` | `Bulk Transfer` (default, h (Ta − T_top) with h = `bareSoilTransfer`), `Dirichlet`, `Neumann`, `Energy Balance` (GEOtop 3.0's bare-soil balance through the skin node of `skinNode`: `groundAlbedo`/`groundAlbedoNearInfrared` dry, `groundAlbedoWet`/`groundAlbedoNearInfraredWet` saturated, `soilEmissivity` 0.96, `soilRoughness` 0.01 m; latent heat of the evaporation given in `inEvaporation`) | `bareSoilTopValue` / `inTopBC`: °C or W m⁻² into the soil |
 | heat, bottom | `bottomBCType` | `Bottom No Gradient` (default), `Bottom Dirichlet`, `Bottom Neumann` | `bottomBCValue` / `inBottomBC`: °C or W m⁻² into the column |
 | water, bottom | `soilWaterBottomType` | `Bottom Free Drainage` (default), `Bottom Impervious`, `Bottom Dirichlet`, `Bottom Neumann` | `soilWaterBottomValue` / `inSoilWaterBottomBC`: ψ [m] for Dirichlet, inflow [m s⁻¹] for Neumann |
 

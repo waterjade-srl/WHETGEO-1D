@@ -31,7 +31,11 @@ public class SnowSoilSolverTest {
 				assertEquals(configuration + " energy, step " + k, 0.0, s.energyClosure()[k], 1e-6);
 				assertTrue(configuration + " heat step " + k + " converged", s.converged()[k]);
 				assertTrue(configuration + " surface sweeps, step " + k, s.surfaceConverged()[k]);
-				assertEquals(configuration + " linearisation, step " + k, 0.0, s.linearisation()[k], 1e-2);
+				// GEOtop's λ switches from sublimation to evaporation at 0 °C (fidelity): a top cell converged onto
+				// the switch leaves the jump of λE (< 1 W m-2) as linearisation energy, recorded in the balance
+				boolean onTheSwitch = Math.abs(s.surfaceTemperature()[k] - MELTING_TEMPERATURE) < 1e-5;
+				assertEquals(configuration + " linearisation, step " + k, 0.0, s.linearisation()[k],
+						onTheSwitch ? SEASON.timeDelta() : 1e-2);
 			}
 		}
 	}
@@ -122,7 +126,8 @@ public class SnowSoilSolverTest {
 		for (int k = 0; k < s.time().length; k++) {
 			sum += s.linearisation()[k];
 			worst = Math.max(worst, Math.abs(s.linearisation()[k]));
-			assertEquals(1, s.sweeps()[k]);
+			// one solve, two when GEOtop's skin rises above 0 °C and the step is solved again without it
+			assertTrue(s.sweeps()[k] <= 2);
 		}
 		assertTrue("worst step " + worst, worst > 1e4);
 		assertTrue("season " + sum, sum > 1e6);
@@ -164,48 +169,5 @@ public class SnowSoilSolverTest {
 		assertEquals(result.budget().snowfallEnergy(), cell.internalEnergy(), 0.0);
 		assertTrue(result.budget().snowfallEnergy() < 0.0);
 		assertTrue(Double.isNaN(result.surfaceTemperature()));
-	}
-
-	/**
-	 * The experimental skin node (SnowSoilSolver.setSkin): every step closes the
-	 * pack budgets and converges, the linearisation stays at the sweep
-	 * tolerance, and on cold nights the skin is colder than the top cell, which
-	 * the surface radiates through.
-	 */
-	@Test
-	public void experimentalSkinClosesTheBudgetsAndCoolsTheSurface() {
-		SnowSoilSolver withSkin = SEASON.solver(Configuration.FIDELITY);
-		withSkin.setSkin(true);
-		Series s = SEASON.run(withSkin);
-		for (int k = 0; k < s.time().length; k++) {
-			assertEquals("mass, step " + k, 0.0, s.massClosure()[k], 1e-11);
-			assertEquals("energy, step " + k, 0.0, s.energyClosure()[k], 1e-6);
-			assertTrue("heat step " + k + " converged", s.converged()[k]);
-			assertTrue("surface sweeps, step " + k, s.surfaceConverged()[k]);
-			// GEOtop's λ switches from sublimation to evaporation at 0 °C: a surface converged onto the switch
-			// leaves the jump of λE (< 1 W m-2) as linearisation energy, recorded in the balance
-			boolean onTheSwitch = Math.abs(s.surfaceTemperature()[k] - MELTING_TEMPERATURE) < 1e-5;
-			assertEquals("linearisation, step " + k, 0.0, s.linearisation()[k],
-					onTheSwitch ? SEASON.timeDelta() : 1e-1);
-		}
-		// on the cold nights of the first 80 days the skin is colder than the centre of the top cell
-		SnowSoilSolver again = SEASON.solver(Configuration.FIDELITY);
-		again.setSkin(true);
-		int colder = 0;
-		int nights = 0;
-		for (int k = 0; k < 80 * 24; k++) {
-			double[] soil = again.soilTemperatures();
-			SnowSoilStepResult r = again.step(SEASON.forcing(k * SEASON.timeDelta(), soil[soil.length - 1]));
-			double hour = ((k + 1) % 24);
-			if (!Double.isNaN(r.surfaceTemperature()) && (hour < 5 || hour > 21)) {
-				double[] t = r.heat().temperatures();
-				nights++;
-				if (r.surfaceTemperature() < t[t.length - 1]) {
-					colder++;
-				}
-			}
-		}
-		assertTrue("colder skin in " + colder + " of " + nights + " night hours", colder > 0.9 * nights);
-		assertEquals("melted out", 0.0, s.swe()[s.time().length - 1], 0.0);
 	}
 }

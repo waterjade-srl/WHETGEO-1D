@@ -41,24 +41,21 @@ import org.geoframe.whetgeo1d.snow.surface.VapourPhase;
  * <b>Skin.</b> GEOtop balances the energy at a surface node of zero
  * thickness above the top soil layer ({@code nsurface = 0}, keyword 68,
  * {@code energy.balance.cc:1398}), coupled to the layer by conduction over
- * half its thickness. The column has no such node (SURF-2); here it is
- * eliminated outside the solver: with G linearised at the skin temperature
- * T<sub>s</sub><sup>0</sup> of the previous step and the conductance
- * K = λ<sub>1</sub>/(Δz<sub>1</sub>/2) of the top cell,
- * G(T<sub>s</sub>) = K (T<sub>s</sub> - T<sub>1</sub>) gives
- * T<sub>s</sub> = (G<sub>0</sub> - G' T<sub>s</sub><sup>0</sup> + K T<sub>1</sub>)/(K - G')
- * and the flux into the column K G<sub>0</sub>'(T<sub>1</sub>) linear in the
- * top-cell temperature T<sub>1</sub>, with slope K G'/(K - G') ≤ 0
- * ({@link Step#topBoundary(BareSoilEnergyBalance, double, double, double)}).
- * Without the conductance the surface is the top cell itself
- * ({@link Step#topBoundary(BareSoilEnergyBalance, double)}).
+ * half its thickness. The column couples this balance like the one over snow,
+ * through the skin node of {@link SkinNode} eliminated in the solver (SURF-2):
+ * the component passes {@link Step#evaluate} as a
+ * {@link TopBoundary.SurfaceBalance}, and the {@link SnowSoilSolver} returns
+ * the skin temperature and the balance at it
+ * ({@link SnowSoilSolver#lastSurface()}). The two {@code topBoundary} methods
+ * below give the same linear flux for one linearisation, for checks.
  *
  * <p>
  * The resistances are the Monin–Obukhov ones of the snow surface
  * ({@link MoninObukhov}) with the roughness of the soil, GEOtop's
  * {@code SoilRoughness} (keyword 15, in mm, default 10 mm), zero displacement
  * and the same scalar roughness, as {@code update_roughness_soil} gives them,
- * evaluated at the start of the step and frozen over it. The albedo follows
+ * evaluated at the start of the step at the temperature of the top cell, where
+ * GEOtop restarts its skin ({@code energy.balance.cc:732}), and frozen over it. The albedo follows
  * the water content of the top cell between its dry and saturated values
  * ({@code find_albedo}, {@code radiation.cc:1050-1057}).
  *
