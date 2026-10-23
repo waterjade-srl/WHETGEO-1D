@@ -107,7 +107,15 @@ Only with `Tsurface` imposed: SWnet, H and LE with snow (2.2, 3.7, 3.6 W m⁻² 
 **Beyond the tolerances:**
 
 - **HS max**, by 17–18 mm: GEOtop keeps the thickness of a melting single layer.
-- **SWE peak, melt and runoff** (peak +80 % / +33 %, melt −36 % / −41 %, runoff −26 % / −24 %, imposed / balance). On 2 November, with snow and rain falling together at about 0 °C, GEOtop melts nearly all the fresh snow as it falls, while the port melts less of it and its pack grows to 1.9 mm against 1.0 mm. Before the merge, a warm liquid "snow" cell melted each new snowfall and hid this difference. The likely place is the snow–soil heat exchange under a 1–5 mm pack; it is still to be isolated.
+- **SWE peak, melt and runoff** (peak +80 % / +33 %, melt −36 % / −41 %, runoff −26 % / −24 %, imposed / balance). On 2 November, snow and rain fall together at about 0 °C. GEOtop melts nearly all the fresh snow as it falls; the port's pack grows to 1.9 mm against 1.0 mm.
+
+  This is not a porting error. The snow–soil conduction agrees within 1–2 W m⁻², and the fresh snow, the rain and the thin-cell rules are the same in both. The difference comes from three GEOtop behaviours that the port does not reproduce:
+
+  - its **skin node**, which cools below 0 °C over the melting pack and gains sensible heat and condensation (the port has `experimentalSkin`, off by default);
+  - a **ground albedo of 0 under snow**, a GEOtop error: `avis_ground` is only computed without snow (`energy.balance.cc:238, 455-486`), so thin snow has albedo 0.02–0.10;
+  - **no melt shrinkage of cells below 0.1 W_c of ice** (`snow.cc:1093-1110`), so a thin pack stays thick and insulates the skin. The port shrinks every cell, by the SNOW-6 decision.
+
+  With all three switched on in a sensitivity run, the port follows GEOtop on this event: SWE peak 1.09 mm, melt 3.13 against 3.73 mm, and T_s, LWnet, H and LE with snow at 0.23 K, 0.4, 0.6 and 1.1 W m⁻² RMSE (table in notebook 6). The skin and the shrinkage of thin cells are design choices still to confirm for fidelity; the albedo is not reproduced.
 - **Ts with snow:** 0.52 / 0.59 K RMSE.
 - **With the balance:** SWnet, H and LE with snow (7.3, 5.4, 9.0 W m⁻²), from hours with partial snow.
 - **With `Tsurface` imposed:** θw / θi of the top cell.
