@@ -134,6 +134,8 @@ public final class SnowSoilHeatDriver {
 	private final boolean[] freezingSoil;
 	/** Active-cell index of the largest residual ratio of the last check, -1 before any step. */
 	private int worstCell = -1;
+	/** Energy absorbed inside the active cells [W m-2], bottom first; null for none (SNOW-7). */
+	private double[] cellSources;
 
 	/**
 	 * @param soil       soil part of the column, its temperatures are the initial
@@ -199,6 +201,16 @@ public final class SnowSoilHeatDriver {
 		}
 		soilQuantities.computeThermalConductivity(nSoil);
 		return column.variables().lambdas[nSoil - 1];
+	}
+
+	/**
+	 * Energy absorbed inside the cells in the following heat steps [W m-2], for
+	 * instance the shortwave below the surface (SNOW-7): one value per active
+	 * cell of those steps, soil first, bottom first; null for none. It enters
+	 * each cell as a source, and the top input of the {@link EnergyBudget}.
+	 */
+	public void setCellSources(double[] sources) {
+		cellSources = sources == null ? null : sources.clone();
 	}
 
 	/** Distance from the centre of the top soil cell to the soil surface, half its thickness [m]. */
@@ -459,6 +471,23 @@ public final class SnowSoilHeatDriver {
 			snowClosure.computeXStar(0.0, 0, i);
 		}
 		double[] oldEnergy = Arrays.copyOf(variables.internalEnergys, n);
+		double[] sources = new double[n];
+		if (cellSources != null) {
+			if (cellSources.length != n) {
+				throw new IllegalStateException("cell sources for " + cellSources.length + " cells, the step has " + n);
+			}
+			if (n == 1 && cellSources[0] != 0.0) {
+				throw new IllegalStateException("a single cell takes its energy through the top boundary");
+			}
+			System.arraycopy(cellSources, 0, sources, 0, n);
+		}
+		// the kernel subtracts the term from the energy at the start of the step: a sink [J m-2]
+		Arrays.fill(variables.heatSourcesSinksTerm, 0.0);
+		double sourceInput = 0.0;
+		for (int i = 0; i < n; i++) {
+			variables.heatSourcesSinksTerm[i] = -sources[i] * timeDelta;
+			sourceInput += sources[i] * timeDelta;
+		}
 
 		IBoundaryCondition topCondition;
 		double topValue;
@@ -495,7 +524,7 @@ public final class SnowSoilHeatDriver {
 			}
 		}
 		requireFinite(variables.temperatures, n);
-		Evaluation evaluation = evaluate(nSoil, n, oldEnergy, top, topStartTemperature, bottomValue, timeDelta);
+		Evaluation evaluation = evaluate(nSoil, n, oldEnergy, sources, top, topStartTemperature, bottomValue, timeDelta);
 
 		boolean polished = false;
 		for (int round = 0; round < MAX_POLISH_ROUNDS && !evaluation.converged() && n > 1; round++) {
@@ -504,7 +533,7 @@ public final class SnowSoilHeatDriver {
 			inner += instrumentation.inner();
 			polished = true;
 			requireFinite(variables.temperatures, n);
-			evaluation = evaluate(nSoil, n, oldEnergy, top, topStartTemperature, bottomValue, timeDelta);
+			evaluation = evaluate(nSoil, n, oldEnergy, sources, top, topStartTemperature, bottomValue, timeDelta);
 		}
 		double[] newEnergy = evaluation.newEnergy();
 		double[] fluxes = evaluation.fluxes();
@@ -512,7 +541,7 @@ public final class SnowSoilHeatDriver {
 		for (int i = 0; i < n; i++) {
 			storage += newEnergy[i] - oldEnergy[i];
 		}
-		EnergyBudget budget = EnergyBudget.of(storage, timeDelta * fluxes[0], -timeDelta * fluxes[n]);
+		EnergyBudget budget = EnergyBudget.of(storage, timeDelta * fluxes[0], -timeDelta * fluxes[n] + sourceInput);
 		NewtonReport report = new NewtonReport(outer, inner, hitCap, n == 1 ? settings.absoluteTolerance() : tolerance,
 				evaluation.worstResidualRatio(), evaluation.converged(), polished, n == 1);
 
@@ -532,12 +561,12 @@ public final class SnowSoilHeatDriver {
 		}
 	}
 
-	private Evaluation evaluate(int nSoil, int n, double[] oldEnergy, TopBoundary top, double topStartTemperature,
-			double bottomValue, double timeDelta) {
+	private Evaluation evaluate(int nSoil, int n, double[] oldEnergy, double[] sources, TopBoundary top,
+			double topStartTemperature, double bottomValue, double timeDelta) {
 		double[] newEnergy = newEnergies(nSoil, n);
 		double[] fluxes = conductiveFluxes(n, top, topStartTemperature, bottomValue);
 		return new Evaluation(newEnergy, fluxes,
-				worstResidualRatio(n, oldEnergy, newEnergy, fluxes, top, timeDelta));
+				worstResidualRatio(n, oldEnergy, newEnergy, fluxes, sources, top, timeDelta));
 	}
 
 	/**
@@ -713,20 +742,21 @@ public final class SnowSoilHeatDriver {
 
 	/**
 	 * Largest ratio between the residual of a cell and its bound (specification
-	 * §3.6): F_i = U_i^{n+1} - U_i^n - Δt (G_i - G_{i+1}), bound τ + κ ε (S_i +
+	 * §3.6): F_i = U_i^{n+1} - U_i^n - Δt (G_i - G_{i+1} + Q_i), Q_i the energy
+	 * absorbed inside the cell ({@link #setCellSources}), bound τ + κ ε (S_i +
 	 * |∂F_i/∂T_i| |T_i|), S_i the sum of the magnitudes of the terms of F_i.
 	 */
-	private double worstResidualRatio(int n, double[] oldEnergy, double[] newEnergy, double[] fluxes, TopBoundary top,
-			double timeDelta) {
+	private double worstResidualRatio(int n, double[] oldEnergy, double[] newEnergy, double[] fluxes, double[] sources,
+			TopBoundary top, double timeDelta) {
 		WGProblemQuantities variables = column.variables();
 		double[] lambda = variables.lambdasInterface;
 		double[] distance = column.geometry().spaceDeltaZ;
 		double worst = 0.0;
 		worstCell = 0;
 		for (int i = 0; i < n; i++) {
-			double residual = newEnergy[i] - oldEnergy[i] - timeDelta * (fluxes[i] - fluxes[i + 1]);
+			double residual = newEnergy[i] - oldEnergy[i] - timeDelta * (fluxes[i] - fluxes[i + 1] + sources[i]);
 			double scale = Math.abs(newEnergy[i]) + Math.abs(oldEnergy[i])
-					+ timeDelta * (Math.abs(fluxes[i]) + Math.abs(fluxes[i + 1]));
+					+ timeDelta * (Math.abs(fluxes[i]) + Math.abs(fluxes[i + 1]) + Math.abs(sources[i]));
 			double below = i > 0 || bottomType == DiffusionBoundaryConditionType.BOTTOM_DIRICHLET
 					? lambda[i] / distance[i]
 					: 0.0;

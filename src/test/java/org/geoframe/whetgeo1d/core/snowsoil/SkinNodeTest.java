@@ -118,7 +118,10 @@ public class SkinNodeTest {
 		}
 	}
 
-	/** At convergence the eliminated skin satisfies its own equation, EB(T_s) = K (T_s - T_top). */
+	/**
+	 * At convergence the eliminated skin satisfies its own equation, EB(T_s) - P =
+	 * K (T_s - T_top), P the shortwave absorbed below the surface (SNOW-7).
+	 */
 	@Test
 	public void skinEquationHoldsAtConvergence() {
 		SnowSoilSolver solver = SEASON.solver(Configuration.FIDELITY);
@@ -130,7 +133,7 @@ public class SkinNodeTest {
 			if (s.mode() == SurfaceMode.SKIN && s.overSnow()) {
 				double conducted = s.conductance() * (s.surfaceTemperature() - s.topCellTemperature());
 				// the sweeps stop at 1e-6 K: the balance moves by |EB'| 1e-6 at most
-				assertEquals("step " + k, s.fluxes().energyBalance(), conducted,
+				assertEquals("step " + k, s.fluxes().energyBalance() - s.absorbedBelow(), conducted,
 						1e-6 * Math.abs(s.fluxes().derivative()) * 10 + 1e-9);
 				checked++;
 			}

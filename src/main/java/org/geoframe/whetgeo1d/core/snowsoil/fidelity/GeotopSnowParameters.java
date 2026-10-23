@@ -151,6 +151,6 @@ public final class GeotopSnowParameters {
 		thin = thin.with(soilRoughness, threshold, get("SoilEmissiv", thin.soilEmissivity()));
 		return new SnowProcesses(eos, balance, turbulence, albedo, p.restoringSnowfall(), compaction, slope,
 				percolation, p.sublimationThickness(), restratification, p.precipitation(), p.surfaceCoupling(), thin,
-				p.skin());
+				p.skin(), p.shortwavePenetration());
 	}
 }

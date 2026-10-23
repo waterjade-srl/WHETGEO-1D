@@ -57,6 +57,7 @@ Names are the component's fields: set them in `parameter{}` as `"snowsoil.<name>
 | `maxSnowCells` | 10 / 11 | capacity of snow cells above the soil |
 | `alphaSnow` | 1e5 | smoothing of the snow equation of state |
 | `skinNode` | by configuration | skin node of the surface balance over snow and bare soil (SURF-1/2), eliminated in the solver: `Geotop` (fidelity: as GEOtop, the step solved again without the skin when it rises above 0 °C over snow), `Capped` (recommended: the skin held at 0 °C over snow, the surplus melts the top cell), `None` (the surface is the top cell; sensitivity) |
+| `shortwavePenetration` | by configuration | shortwave absorbed below the snow surface (SNOW-7), with more than one snow cell: `Geotop` (fidelity: k = ρ/3 + 50 m⁻¹ of each cell on the cumulative depth, the rest to the top soil cell, none at the surface), `Compounded` (transmission compounded cell by cell; agreed for the recommended configuration, not yet its default), `None` (all at the surface; the recommended default for now) |
 | `windHeight`, `temperatureHeight` | 2, 2 m | measurement heights |
 | `groundAlbedo` | 0.2 | albedo of the soil under thin snow |
 | `heatTolerance`, `heatMaxIterations`, `heatPicardIterations` | 1e-3 J m⁻², 50, 1 | Newton settings of the heat step |

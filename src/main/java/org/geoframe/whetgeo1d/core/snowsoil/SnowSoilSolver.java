@@ -382,9 +382,12 @@ public final class SnowSoilSolver {
 	 * @param fluxes             the balance at T<sub>s</sub>; null without one
 	 * @param conductance        K of the skin [W m-2 K-1], NaN without it
 	 * @param overSnow           the surface was the snow
+	 * @param absorbedBelow      net shortwave absorbed below the surface, in the
+	 *                           cells (SNOW-7) [W m-2]: the surface balance is
+	 *                           {@code fluxes.energyBalance()} minus it
 	 */
 	public record SurfaceSolution(SurfaceMode mode, double surfaceTemperature, double topCellTemperature,
-			SurfaceFluxes fluxes, double conductance, boolean overSnow) {
+			SurfaceFluxes fluxes, double conductance, boolean overSnow, double absorbedBelow) {
 	}
 
 	/** The surface of the last step (skin temperature, bare-soil fluxes); null before the first step. */
@@ -535,6 +538,12 @@ public final class SnowSoilSolver {
 				factor * slope, tk, Math.abs(skin - tk), SurfaceMode.SKIN, conductance);
 	}
 
+	/** The balance at the surface without the shortwave absorbed below it (SNOW-7). */
+	private static SurfaceFluxes withoutPenetrated(SurfaceFluxes f, double penetrated) {
+		return new SurfaceFluxes(f.netShortwave(), f.netLongwave(), f.sensibleHeat(), f.latentHeatFlux(),
+				f.vapourFlux(), f.latentHeat(), f.energyBalance() - penetrated, f.derivative());
+	}
+
 	/** K of the upper half of the top snow cell, at its state at the start of the step [W m-2 K-1]. */
 	private double snowSkinConductance(SnowCell top) {
 		return heatProperties.conductivity().conductivity(top) / (0.5 * top.thickness());
@@ -612,11 +621,36 @@ public final class SnowSoilSolver {
 		// 3: heat, the surface balance through the skin or at the top cell (SURF-1/2)
 		SurfaceSolve solved = null;
 		HeatStepResult heatStep;
+		double penetrated = 0.0;
+		double soilSource = 0.0;
 		if (snowAtStart && !imposedSnowTop) {
 			SurfaceEnergyBalance snowBalance = balance;
-			solved = solveSurface(start, snowBalance::evaluate, startTemperature,
-					snowSkinConductance(start.get(start.size() - 1)), true, pendingApplied / dt,
-					forcing.bottomValue(), dt, soilStart);
+			// SNOW-7: the shortwave absorbed inside the pack leaves the surface balance for the cells
+			double[] absorbed = processes.shortwavePenetration().absorbed(start,
+					balance.evaluate(startTemperature).netShortwave());
+			TopBoundary.Balance surfaceBalance = snowBalance::evaluate;
+			if (absorbed != null) {
+				int nSoil = heat.soilCells();
+				double[] sources = new double[nSoil + start.size()];
+				for (int j = 0; j < start.size(); j++) {
+					sources[nSoil + j] = absorbed[j];
+					penetrated += absorbed[j];
+				}
+				// what crosses the pack: the top soil cell, or the bottom snow cell of a snow-only column
+				sources[nSoil > 0 ? nSoil - 1 : 0] += absorbed[start.size()];
+				penetrated += absorbed[start.size()];
+				soilSource = nSoil > 0 ? dt * absorbed[start.size()] : 0.0;
+				heat.setCellSources(sources);
+				double below = penetrated;
+				surfaceBalance = t -> withoutPenetrated(snowBalance.evaluate(t), below);
+			}
+			try {
+				solved = solveSurface(start, surfaceBalance, startTemperature,
+						snowSkinConductance(start.get(start.size() - 1)), true, pendingApplied / dt,
+						forcing.bottomValue(), dt, soilStart);
+			} finally {
+				heat.setCellSources(null);
+			}
 			heatStep = solved.heatStep();
 		} else if (!snowAtStart && forcing.bareSoilTop() instanceof TopBoundary.SurfaceBalance soilBalance) {
 			solved = solveSurface(start, soilBalance.balance(), startTemperature, soilSkinConductance(), false,
@@ -636,6 +670,8 @@ public final class SnowSoilSolver {
 				&& processes.thinSnow().mergesMeltedLayer() && ice(heatStep.snow()) < MERGED_LAYER_ICE;
 		if (merged) {
 			heat.setSoilTemperatures(soilStart);
+			penetrated = 0.0;
+			soilSource = 0.0;
 			pendingSurfaceEnergy += pendingApplied;
 			pendingApplied = 0.0;
 			solved = null;
@@ -685,8 +721,8 @@ public final class SnowSoilSolver {
 			double topCellTemperature = topOf(heatStep);
 			surfaceTemperature = solved.surfaceTemperature();
 			surface = balance.evaluate(surfaceTemperature);
-			linearisation = dt
-					* (lineAtStart + lineSlope * (topCellTemperature - startTemperature) - surface.energyBalance());
+			linearisation = dt * (lineAtStart + lineSlope * (topCellTemperature - startTemperature)
+					- (surface.energyBalance() - penetrated));
 			Sublimated sublimated = SnowSublimation.apply(cells, surface.vapourFlux() * dt, balance.vapourPhase(),
 					processes.sublimationThickness(), eos);
 			cells = sublimated.cells();
@@ -706,9 +742,9 @@ public final class SnowSoilSolver {
 					- bareSoil.energyBalance());
 		}
 		lastSurface = solved == null
-				? new SurfaceSolution(SurfaceMode.IMPOSED, Double.NaN, topOf(heatStep), null, Double.NaN, false)
+				? new SurfaceSolution(SurfaceMode.IMPOSED, Double.NaN, topOf(heatStep), null, Double.NaN, false, 0.0)
 				: new SurfaceSolution(solved.mode(), solved.surfaceTemperature(), topOf(heatStep),
-						snowSurface ? surface : bareSoil, solved.conductance(), snowSurface);
+						snowSurface ? surface : bareSoil, solved.conductance(), snowSurface, snowSurface ? penetrated : 0.0);
 
 		// 5: compaction and melt shrinkage, against the ice at the start of the step
 		cells = processes.compaction().compact(cells, dt, processes.slopeAngle());
@@ -836,7 +872,8 @@ public final class SnowSoilSolver {
 			double[] fluxes = heatStep.conductiveFluxes();
 			int nSoil = heat.soilCells();
 			soilEnergyClosure = soilInternalEnergy() - soilEnergyBefore
-					- dt * (fluxes[0] - fluxes[nSoil]) - topEnergy + soilDrainageEnergy + soilSinkEnergy - soilStorageHeat;
+					- dt * (fluxes[0] - fluxes[nSoil]) - soilSource - topEnergy + soilDrainageEnergy + soilSinkEnergy
+					- soilStorageHeat;
 		}
 
 		snow = cells;

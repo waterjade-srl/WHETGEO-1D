@@ -219,7 +219,7 @@ final class StepAccumulator {
 		put("snowCells", snow.size());
 		put("surfaceAge", r.surfaceAge());
 		double ts = r.surfaceTemperature();
-		if (Double.isNaN(ts) && bareSoil != null) {
+		if (Double.isNaN(ts)) {
 			ts = bareSoilTemperature;
 		}
 		if (Double.isNaN(ts) && soilTemperature.length > 0) {

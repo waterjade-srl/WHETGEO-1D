@@ -60,7 +60,18 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 		MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
 		double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
 		RestratificationPolicy restratification, PrecipitationTemperature precipitation,
-		SurfaceCoupling surfaceCoupling, ThinSnow thinSnow, SkinNode skin) {
+		SurfaceCoupling surfaceCoupling, ThinSnow thinSnow, SkinNode skin, ShortwavePenetration shortwavePenetration) {
+
+	/** Processes without shortwave penetration ({@link ShortwavePenetration#NONE}). */
+	public SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
+			MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
+			double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
+			RestratificationPolicy restratification, PrecipitationTemperature precipitation,
+			SurfaceCoupling surfaceCoupling, ThinSnow thinSnow, SkinNode skin) {
+		this(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction, slopeAngle,
+				percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow, skin,
+				ShortwavePenetration.NONE);
+	}
 
 	/** Processes without a skin node ({@link SkinNode#NONE}). */
 	public SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
@@ -96,6 +107,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 		Objects.requireNonNull(surfaceCoupling, "surfaceCoupling");
 		Objects.requireNonNull(thinSnow, "thinSnow");
 		Objects.requireNonNull(skin, "skin");
+		Objects.requireNonNull(shortwavePenetration, "shortwavePenetration");
 		if (!(restoringSnowfall > 0.0)) {
 			throw new IllegalArgumentException("restoringSnowfall must be positive, got " + restoringSnowfall);
 		}
@@ -123,7 +135,8 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				new LiquidWaterPercolation(LiquidWaterPercolation.Parameters.geotop(), eos),
 				SnowSublimation.ThicknessRule.UNCHANGED,
 				new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
-				PrecipitationTemperature.GEOTOP, SurfaceCoupling.implicit(), ThinSnow.geotop(), SkinNode.GEOTOP);
+				PrecipitationTemperature.GEOTOP, SurfaceCoupling.implicit(), ThinSnow.geotop(), SkinNode.GEOTOP,
+				ShortwavePenetration.GEOTOP);
 	}
 
 	/**
@@ -145,38 +158,50 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				new TopCellThicknessCap(
 						new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
 						TopCellThicknessCap.DEFAULT_MAX_THICKNESS, eos),
-				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit(), ThinSnow.none(), SkinNode.CAPPED);
+				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit(), ThinSnow.none(), SkinNode.CAPPED,
+				// SNOW-7 agreed as COMPOUNDED; off until verified on the synthetic season (sub-stepping, refreezing)
+				ShortwavePenetration.NONE);
 	}
 
 	/** Same processes with another restratification policy. */
 	public SnowProcesses withRestratification(RestratificationPolicy policy) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, policy, precipitation, surfaceCoupling, thinSnow, skin);
+				slopeAngle, percolation, sublimationThickness, policy, precipitation, surfaceCoupling, thinSnow, skin,
+				shortwavePenetration);
 	}
 
 	/** Same processes with another surface coupling. */
 	public SnowProcesses withSurfaceCoupling(SurfaceCoupling coupling) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling, thinSnow, skin);
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling, thinSnow, skin,
+				shortwavePenetration);
 	}
 
 	/** Same processes with another compaction. */
 	public SnowProcesses withCompaction(CompactionModel model) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, model,
 				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
-				skin);
+				skin, shortwavePenetration);
 	}
 
 	/** Same processes with another thin-snow regime. */
 	public SnowProcesses withThinSnow(ThinSnow regime) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, regime, skin);
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, regime, skin,
+				shortwavePenetration);
 	}
 
 	/** Same processes with another skin node (SURF-1/2; {@link SkinNode#NONE} for sensitivity runs). */
 	public SnowProcesses withSkin(SkinNode node) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
 				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
-				node);
+				node, shortwavePenetration);
+	}
+
+	/** Same processes with another shortwave penetration (SNOW-7; {@link ShortwavePenetration#NONE} for sensitivity runs). */
+	public SnowProcesses withShortwavePenetration(ShortwavePenetration penetration) {
+		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
+				skin, penetration);
 	}
 }

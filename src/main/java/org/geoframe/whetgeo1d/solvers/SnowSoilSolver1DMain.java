@@ -64,6 +64,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.IncomingLongwave;
 import org.geoframe.whetgeo1d.core.snowsoil.fidelity.GeotopSnowParameters;
 import org.geoframe.whetgeo1d.core.snowsoil.BareSoilEnergyBalance;
+import org.geoframe.whetgeo1d.core.snowsoil.ShortwavePenetration;
 import org.geoframe.whetgeo1d.core.snowsoil.SkinNode;
 import org.geoframe.whetgeo1d.core.snowsoil.SoilWaterDriver;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
@@ -643,6 +644,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public String skinNode = "";
 
+	@Description("Shortwave absorbed below the snow surface (SNOW-7): None, Geotop (extinction of each cell on the cumulative depth) or Compounded; empty: Geotop in fidelity, None in recommended (Compounded not yet verified).")
+	@In
+	public String shortwavePenetration = "";
+
 	@Description("Halvings of a step that does not converge before giving up (SOL-5).")
 	@In
 	public int maxHalvings = 4;
@@ -761,8 +766,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 			// the skin (or the top cell) and the balance of the bare soil, as the solver coupled them
 			skin = surfaceSolution.surfaceTemperature();
 			bareSoil = surfaceSolution.fluxes();
+		} else if (result.snow().isEmpty() && forcing.bareSoilTop() instanceof TopBoundary.SurfaceTemperature imposed) {
+			// bare soil at an imposed surface temperature: that is the surface, not the top cell
+			skin = imposed.temperature();
 		}
 		outBareSoilFluxes = bareSoil;
+		if (Double.isNaN(result.surfaceTemperature()) && !Double.isNaN(skin)) {
+			outSurfaceTemperature = skin;
+		}
 		for (SnowSoilOutputWriter writer : activeWriters) {
 			writer.bareSoilSurface(bareSoil, skin);
 			writer.write(end, solver, result);
@@ -954,6 +965,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 		if (skinNode != null && !skinNode.isBlank()) {
 			processes = processes.withSkin(EnumUtils.fromString(SkinNode.class, skinNode.trim()));
 		}
+		if (shortwavePenetration != null && !shortwavePenetration.isBlank()) {
+			processes = processes.withShortwavePenetration(
+					EnumUtils.fromString(ShortwavePenetration.class, shortwavePenetration.trim()));
+		}
 		SnowThermalConductivity conductivity = snowThermalConductivity == null || snowThermalConductivity.isBlank()
 				? (fidelity ? SnowThermalConductivity.COSENZA : SnowThermalConductivity.JORDAN_1991)
 				: EnumUtils.fromString(SnowThermalConductivity.class, snowThermalConductivity);
@@ -1002,6 +1017,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("maxSnowCells", Integer.toString(capacity));
 		attributes.put("alphaSnow", Double.toString(alphaSnow));
 		attributes.put("skinNode", processes.skin().name());
+		attributes.put("shortwavePenetration", processes.shortwavePenetration().name());
 		if (geotopSnowParameters != null && !geotopSnowParameters.isBlank()) {
 			attributes.put("geotopSnowParameters", geotopSnowParameters.trim());
 		}
@@ -1175,7 +1191,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 				t.maxIterations(), t.minimumWindSpeed(), t.maximumResistance(), t.capVapourResistance()));
 		return new SnowProcesses(p.equationOfState(), p.surfaceBalance(), turbulence, p.albedo(), p.restoringSnowfall(),
 				p.compaction(), p.slopeAngle(), p.percolation(), p.sublimationThickness(), p.restratification(),
-				p.precipitation(), p.surfaceCoupling(), p.thinSnow(), p.skin());
+				p.precipitation(), p.surfaceCoupling(), p.thinSnow(), p.skin(), p.shortwavePenetration());
 	}
 
 	private List<String> inputFileList() {

@@ -39,11 +39,15 @@ def heatTolerance = (System.getProperty("heatTolerance") ?: "1e-3") as double
 def onNonConvergence = System.getProperty("onNonConvergence") ?: "Stop"
 // -DskinNode=None: no skin node (sensitivity, GEOtop's HighestNodeCorrespondsToLayer = 1); empty: the configuration's
 def skinNode = System.getProperty("skinNode") ?: ""
+// -DshortwavePenetration=None: all the net shortwave at the surface (sensitivity, SNOW-7); empty: the configuration's
+def shortwavePenetration = System.getProperty("shortwavePenetration") ?: ""
 def label = System.getProperty("label") ? "_" + System.getProperty("label") : ""
 // round-4 attribution runs: -DthinSnowRegime=None, -DporosityCap=Ice_Density, -DfaceConductance=Harmonic_Mean (empty: fidelity's)
 def thinSnowRegime = (System.getProperty("thinSnowRegime") ?: "").replace("_", " ")
 def porosityCap = (System.getProperty("porosityCap") ?: "").replace("_", " ")
 def faceConductance = (System.getProperty("faceConductance") ?: "").replace("_", " ")
+// -DheatPicardIterations=3: conductivities refreshed within the step (GEOtop evaluates them at every Newton iterate)
+def heatPicardIterations = (System.getProperty("heatPicardIterations") ?: "1") as int
 
 new OMS3().sim(name: "snowsoil_canada_ntgs") {
 
@@ -154,8 +158,10 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.porosityCap"            porosityCap
             "snowsoil.faceConductance"        faceConductance
             "snowsoil.heatTolerance"          heatTolerance
+            "snowsoil.heatPicardIterations"   heatPicardIterations
             "snowsoil.onNonConvergence"       onNonConvergence
             "snowsoil.skinNode"               skinNode
+            "snowsoil.shortwavePenetration"   shortwavePenetration
             "snowsoil.maxSnowCells"           10
             // the case's snow keywords of geotop.inpts (GeotopSnowParameters)
             "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.9, FreshSnowReflNIR=0.65, AlbExtParSnow=10, IrriducibleWatSatSnow=0.02, SnowEmissiv=0.99, SnowRoughness=0.1, DrySnowDefRate=1, WetSnowDefRate=1.5, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=20, SWEtop=20, MaxSnowLayersMiddle=4, PointSlope=${slope}"

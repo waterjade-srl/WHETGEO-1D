@@ -89,11 +89,12 @@ The forcing is GEOtop's own, computed by the temporary fidelity tools (`GeotopFo
   - GEOtop's skin node (`HighestNodeCorrespondsToLayer = 0`, SURF-1/2), over snow and bare soil, eliminated in the solver (`SkinNode`): the cause of the 1–1.5 K colder soil of the first runs (see Results);
   - GEOtop's thin-snow regime: soil roughness and emissivity below `ThresSnowSoilRough` = `SoilRoughness` = 10 mm by default, so a few days in autumn;
   - GEOtop's snow–soil and snow–snow face conductance (SNOW-3);
-  - GEOtop's porosity cap at ρw (SNOW-6).
+  - GEOtop's porosity cap at ρw (SNOW-6);
+  - GEOtop's shortwave penetration (SNOW-7, `ShortwavePenetration.GEOTOP`): with more than one snow layer the net shortwave is absorbed inside the layers with k = ρ/3 + 50 m⁻¹, the rest by the top soil cell, none at the skin (`rad_snow_absorption`, `radiation.cc:582-613`). It closes the residual 0.35–0.6 K the skin left (see Results).
 
-  On NTGS1 ERA5 only the face conductance moves the soil, by −0.15 K at every depth. The other two change it by less than 0.01 K. `-DthinSnowRegime=None`, `-DfaceConductance=Harmonic_Mean` and `-DporosityCap=Ice_Density` (through `SIM_OPTS`) restore the previous behaviour.
+  Without the shortwave penetration, on NTGS1 ERA5 only the face conductance moved the soil, by −0.15 K at every depth (with it, +0.05 K for the harmonic mean); thin-snow regime and porosity cap change it by less than 0.01 K. `-DthinSnowRegime=None`, `-DfaceConductance=Harmonic_Mean`, `-DporosityCap=Ice_Density`, `-DshortwavePenetration=None` and `-DskinNode=None` (through `SIM_OPTS`) restore the previous behaviour; `-DheatPicardIterations=3` refreshes the conductivities within the step (no effect: less than 0.002 K).
 - **Not ported:**
-  - shortwave penetration (SNOW-7) and delayed refreezing (STA-3);
+  - delayed refreezing (STA-3);
   - GEOtop's recomputation of the turbulence without stable correction inside the Newton loop (after 10 iterations with an iterate below −50 °C): it never fires in these cases (see Results).
 
 ### Step control
@@ -104,28 +105,29 @@ One hour needed attention: in NTGS1 JRA-3Q, 5 October 2021 12:00 UTC, a saturate
 
 ## Results
 
-Full tables and figures are in the notebook. In short (porting − GEOtop, 01/09/2021–01/09/2023, with the skin node; soil from `soilTzav.csv`):
+Full tables and figures are in the notebook. In short (porting − GEOtop, 01/09/2021–01/09/2023, with the skin node and the shortwave penetration; soil from `soilTzav.csv`; `python3 compare.py`):
 
-| Case | SWE RMSE | SWE peaks (porting / GEOtop) | Snow-off | Ts with snow (bias) | T bias at 0.1 / 1 / 4 m | H under snow (porting / GEOtop) | Max thaw 2022, 2023 (porting / GEOtop) |
-|---|---|---|---|---|---|---|---|
-| NTGS1 ERA5 | 4.0 mm | 90/89, 107/104 mm | +2, +2 d | −0.18 K | −0.55 / −0.38 / −0.34 K | −6.2 / −6.9 W m⁻² | 768/770, 895/897 mm |
-| NTGS1 JRA-3Q | 5.2 mm | 97/97, 133/129 mm | +2, +4 d | −0.13 K | −0.56 / −0.43 / −0.42 K | −6.5 / −7.0 W m⁻² | 699/700, 822/825 mm |
-| NTGS2 ERA5 | 4.0 mm | 86/85, 101/98 mm | +2, +4 d | −0.17 K | −0.59 / −0.46 / −0.44 K | −6.3 / −6.9 W m⁻² | 739/742, 884/889 mm |
-| NTGS2 JRA-3Q | 4.9 mm | 93/91, 127/124 mm | +2, +2 d | −0.17 K | −0.58 / −0.47 / −0.47 K | −6.4 / −7.0 W m⁻² | 682/685, 815/819 mm |
+| Case | SWE daily bias / RMSE | SWE peaks (porting / GEOtop) | Snow-on, snow-off | Ts with snow (bias) | T bias at 0.1 / 1 / 4 m | Max thaw 2022, 2023 (porting / GEOtop) |
+|---|---|---|---|---|---|---|
+| NTGS1 ERA5 | 0.29 / 0.38 mm | 89.5/89.0, 104/104 mm | 0, 0 d | −0.01 K | +0.04 / +0.13 / +0.06 K | 789/770, 921/897 mm |
+| NTGS1 JRA-3Q | 0.34 / 0.48 mm | 97.2/96.7, 129/129 mm | −1 / 0, 0 / +1 d | +0.02 K | +0.02 / +0.09 / +0.02 K | 717/700, 848/825 mm |
+| NTGS2 ERA5 | 0.33 / 0.45 mm | 85.7/85.1, 98.9/98.3 mm | 0, 0 d | −0.01 K | +0.02 / +0.07 / −0.01 K | 758/742, 915/889 mm |
+| NTGS2 JRA-3Q | 0.71 / 1.01 mm | 92.9/91.1, 125/124 mm | 0, 0 d | −0.01 K | +0.06 / +0.10 / +0.02 K | 702/685, 845/819 mm |
 
-Without the skin (the first runs, and `-DskinNode=None`) the soil was 1.4–1.6 / 1.2–1.4 / 1.0–1.35 K colder at 0.1 / 1 / 4 m, H under snow −4.2 to −5.3 W m⁻², Ts with snow −0.4 to −0.6 K. No step is rejected with or without the skin; a case takes 75–95 s.
+The daily soil RMSE is 0.23–0.35 K at 0.1–1 m and 0.10–0.13 K at 4 m. What is left: the soil at 0.5–1 m is up to 0.5–0.8 K warmer in January–February, the top 0.1 m up to 0.35 K colder in November–December, and the summer thaw 16–26 mm deeper. A case takes 65–95 s; NTGS1 JRA-3Q and NTGS2 JRA-3Q have 1 and 3 rejected steps, each accepted after halving.
 
-- **Snow** follows GEOtop:
-  - snow-on on the same day;
-  - snow-off 3–5 days later;
-  - peaks within 2–6 %;
-  - HS 14–17 mm higher on average (settling, SNOW-6).
-- **The soil was 1–1.5 K colder at every depth without the skin node.** An instrumented GEOtop 3.0 (INDAGINE_SUOLO.md in the case folder of the GEO2GEO workspace) showed why:
-  - **GEOtop's skin node.** GEOtop 3.0 without its skin (`HighestNodeCorrespondsToLayer = 1`) is 1.07–1.32 K colder than with it: the porting's deficit. The porting without skin matched GEOtop-without-skin within 0.05 K from 0.5 to 4 m, in H with snow (−4.2 against −4.2 W m⁻², NTGS1 ERA5) and in the SWE peak.
-  - **Mechanism.** The surface flux reaches the centre of the top cell through half of its thickness. Without the skin that resistance is missing and the pack insulates the soil less in winter. The halved sensible heat is a symptom: GEOtop with its skin but resistances evaluated at the skin gets the porting's H, and its soil cools by only 0.2 K.
-  - **The negative Obukhov lengths** (16–45 % of the snow hours) come from GEOtop restarting the skin at the top-layer temperature at every step (`energy.balance.cc:732`): the resistances are frozen there, 2.3–2.6 K above the air in those hours, while the skin ends the step 1–2 K below it. The port does the same.
-  - **Not the emergency path, a GEOtop artefact that does not act here.** GEOtop recomputes the resistances with `MoninObukhov = 2` (no stable correction) at the current iterate after 10 Newton iterations once an iterate of the surface temperature has fallen below −50 °C (`energy.balance.cc:57-58, 1835, 2618-2621`). In the four cases it never fires: an iterate below −50 °C 0 / 33 / 0 / 29 times, never with more than 10 iterations, so 0 of about 17 000 snow steps per case; switching it off gives byte-identical outputs. It is not ported.
-  - **Not the output convention.** GEOtop's soil profile is an hourly mean; `compare.py` compares the porting's `soilTzav.csv` with it. With one step per hour it equals the end-of-hour value, to the third digit.
-  - **The skin closes about two thirds of the gap.** The residual is 0.35–0.6 K colder; candidates, not yet investigated: the face conductance (SNOW-3), which moved the soil by −0.15 K without the skin and should be rechecked with it; GEOtop's skin conductance recomputed at each Newton iterate (here at the start of the step); the 0 °C handling; settling (HS 6–10 mm higher).
-- **Thaw depth** at the summer maximum is within 1–5 mm of GEOtop's (20–30 mm shallower without the skin). The summer top is GEOtop's `Tsurface`.
-- **Speed:** 60–70 s per case for 3 years hourly with 20 soil cells (26 280 steps).
+How the gap closed, step by step (soil bias at 0.1 / 1 / 4 m, NTGS1 ERA5):
+
+| Porting | Soil bias | SWE daily RMSE | Snow-off |
+|---|---|---|---|
+| First runs (no skin, no penetration) | −1.42 / −1.18 / −1.02 K | 5.7 mm | +3, +5 d |
+| + GEOtop's face conductance, thin snow, porosity cap | −1.58 / −1.33 / −1.15 K | 5.8 mm | +3, +4 d |
+| + skin node, thin cells unshrunk | −0.51 / −0.35 / −0.31 K | 4.0 mm | +2, +2 d |
+| + shortwave penetration | +0.04 / +0.13 / +0.06 K | 0.38 mm | 0, 0 d |
+
+- **The skin node (SURF-1/2).** An instrumented GEOtop 3.0 (INDAGINE_SUOLO.md in the case folder of the GEO2GEO workspace) showed that GEOtop 3.0 without its skin (`HighestNodeCorrespondsToLayer = 1`) is 1.07–1.32 K colder than with it. The surface flux reaches the centre of the top cell through half of its thickness; without the skin that resistance is missing and the pack insulates the soil less. GEOtop restarts the skin at the top-layer temperature at every step (`energy.balance.cc:732`) and freezes the resistances there, which gives the negative Obukhov lengths of 16–45 % of the snow hours; the port does the same.
+- **The shortwave penetration (SNOW-7).** With the skin, the residual (0.35–0.6 K colder) grew from February to April, with the shortwave: from December to January H matched GEOtop's, from February to April the port's was 1.6–3.6 W m⁻² smaller. With more than one layer GEOtop gives no shortwave to the skin: it is absorbed in the top layer, which then starts each step warmer, and the colder skin draws more sensible heat from the air.
+- **Not the emergency path, a GEOtop artefact that does not act here.** GEOtop recomputes the resistances with `MoninObukhov = 2` (no stable correction) after 10 Newton iterations once an iterate of the surface temperature has fallen below −50 °C (`energy.balance.cc:57-58, 1835, 2618-2621`). In the four cases it never fires (0 of about 17 000 snow steps per case; switched off, the outputs are byte-identical). It is not ported.
+- **Not the output convention.** GEOtop's soil profile is an hourly mean; `compare.py` compares the porting's `soilTzav.csv` with it. With one step per hour it equals the end-of-hour value to the third digit.
+- **Without snow** the porting's `Tsurface[C]` is the imposed value (GEOtop's `Tsurface`); before round 5 it was written as the temperature of the top soil cell, which looked 0.9 K colder in summer.
+- **Speed:** 65–95 s per case for 3 years hourly with 20 soil cells (26 280 steps).

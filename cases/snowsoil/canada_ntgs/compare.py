@@ -14,10 +14,12 @@ It compares, over 01/09/2021 - 01/09/2023 (the first year, from 01/09/2020, is w
 - thaw depth: GEOtop's lowest_thawed_soil_depth, and the same algorithm (find_activelayerdepth_up,
   tables.cc:33-78) on the porting's profiles; daily, plus the summer maximum.
 
-Used by canada_ntgs_comparison.ipynb; also runnable as a script: python3 compare.py
+Used by canada_ntgs_comparison.ipynb; also runnable as a script: python3 compare.py [CASE[:LABEL] ...]
+(LABEL: a sensitivity run of run.sh, output/<case>_<label>/)
 """
 import gzip
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -62,10 +64,10 @@ def thaw_depth(temperature, ice, liquid, dz, theta_r):
     return out
 
 
-def load(case):
+def load(case, label=None):
     """Hourly frame with the GEOtop (gt_*) and porting (wg_*) quantities."""
     ref = _csv(os.path.join(HERE, "geotop", case, "reference.csv.gz"))
-    out = os.path.join(HERE, "output", case)
+    out = os.path.join(HERE, "output", case + ("_" + label if label else ""))
     pt = _csv(os.path.join(out, "point.csv"))
     tz = _csv(os.path.join(out, "soilTz.csv"))
     tzav_path = os.path.join(out, "soilTzav.csv")
@@ -119,9 +121,9 @@ def snow_season(swe):
     return seasons
 
 
-def compare(case):
+def compare(case, label=None):
     """Rows of the comparison table of a case."""
-    d = load(case)
+    d = load(case, label)
     day = d.resample("D").mean()
     rows = []
     for q, unit in (("HS", "mm"), ("SWE", "mm")):
@@ -159,9 +161,10 @@ def compare(case):
 
 def main():
     pd.set_option("display.width", 200)
-    for case in CASES:
-        print("==", case)
-        print(compare(case).to_string(index=False, float_format=lambda v: "%.3g" % v))
+    for arg in sys.argv[1:] or CASES:
+        case, _, label = arg.partition(":")
+        print("==", arg)
+        print(compare(case, label or None).to_string(index=False, float_format=lambda v: "%.3g" % v))
 
 
 if __name__ == "__main__":
