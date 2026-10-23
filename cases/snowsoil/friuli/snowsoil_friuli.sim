@@ -34,7 +34,9 @@ def station = (System.getProperty("station") ?: "1") as int
 def stability = System.getProperty("stability") ?: ""
 // optional: -DshortwavePenetration=None (all the net shortwave at the surface, SNOW-7); empty: the configuration's
 def shortwavePenetration = System.getProperty("shortwavePenetration") ?: ""
-def suffix = (stability ? "_" + stability.toLowerCase().replace(" ", "_") : "") + (shortwavePenetration ? "_sw_" + shortwavePenetration.toLowerCase() : "")
+// optional: -DsnowConductivity=Sturm_1997 | Jordan_1991 | Calonne_2011 | Cosenza (SNOW-2); empty: the configuration's
+def snowConductivity = (System.getProperty("snowConductivity") ?: "").replace("_", " ")
+def suffix = (stability ? "_" + stability.toLowerCase().replace(" ", "_") : "") + (shortwavePenetration ? "_sw_" + shortwavePenetration.toLowerCase() : "") + (snowConductivity ? "_k_" + snowConductivity.toLowerCase().replace(" ", "_") : "")
 // latitude, longitude, elevation of the stations (one line each: the OMS preprocessor reads def lines one by one)
 def latitude  = [1: 46.4518, 2: 46.46722, 3: 46.4662, 4: 46.48414][station]
 def longitude = [1: 12.62653, 2: 12.68198, 3: 12.71044, 4: 12.72301][station]
@@ -107,6 +109,7 @@ new OMS3().sim(name: "snowsoil_friuli_${station}") {
             "snowsoil.soilWaterMode"          "Fixed"
             "snowsoil.stabilityCorrection"    "${stability}"
             "snowsoil.shortwavePenetration"   "${shortwavePenetration}"
+            "snowsoil.snowThermalConductivity" "${snowConductivity}"
             "snowsoil.windHeight"             5.0
             "snowsoil.temperatureHeight"      2.0
 

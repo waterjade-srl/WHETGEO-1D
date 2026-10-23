@@ -41,6 +41,8 @@ def onNonConvergence = System.getProperty("onNonConvergence") ?: "Stop"
 def skinNode = System.getProperty("skinNode") ?: ""
 // -DshortwavePenetration=None: all the net shortwave at the surface (sensitivity, SNOW-7); empty: the configuration's
 def shortwavePenetration = System.getProperty("shortwavePenetration") ?: ""
+// -DsnowConductivity=Jordan_1991 | Sturm_1997 | Calonne_2011: another snow conductivity law (SNOW-2); empty: fidelity's, Cosenza
+def snowConductivity = (System.getProperty("snowConductivity") ?: "").replace("_", " ")
 def label = System.getProperty("label") ? "_" + System.getProperty("label") : ""
 // round-4 attribution runs: -DthinSnowRegime=None, -DporosityCap=Ice_Density, -DfaceConductance=Harmonic_Mean (empty: fidelity's)
 def thinSnowRegime = (System.getProperty("thinSnowRegime") ?: "").replace("_", " ")
@@ -162,6 +164,7 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.onNonConvergence"       onNonConvergence
             "snowsoil.skinNode"               skinNode
             "snowsoil.shortwavePenetration"   shortwavePenetration
+            "snowsoil.snowThermalConductivity" snowConductivity
             "snowsoil.maxSnowCells"           10
             // the case's snow keywords of geotop.inpts (GeotopSnowParameters)
             "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.9, FreshSnowReflNIR=0.65, AlbExtParSnow=10, IrriducibleWatSatSnow=0.02, SnowEmissiv=0.99, SnowRoughness=0.1, DrySnowDefRate=1, WetSnowDefRate=1.5, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=20, SWEtop=20, MaxSnowLayersMiddle=4, PointSlope=${slope}"
