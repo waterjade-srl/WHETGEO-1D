@@ -58,7 +58,24 @@ public class ColumnBalanceTest {
 		assertEquals(0.0, total.soilStorageHeat(), 0.0);
 		assertTrue(total.drainage() > 10.0);
 		assertTrue(Math.abs(total.surfaceEnergy()) > 1e7);
-		assertTrue("the vapour phase mismatch is deferred and enters again", total.pendingApplied() > 1e4);
+	}
+
+	/**
+	 * The vapour phase mismatch (sublimation from a cell without ice, or
+	 * evaporation from one without liquid) is deferred and enters again, and the
+	 * column still closes. Without shortwave penetration: with it the skin of
+	 * this season stays below 0 °C over an icy top cell and no mismatch occurs
+	 * (35 steps without it, none with it).
+	 */
+	@Test
+	public void vapourPhaseMismatchIsDeferredAndEntersAgain() {
+		StepController controller = run(SEASON.solver(Configuration.RECOMMENDED,
+				p -> p.withShortwavePenetration(ShortwavePenetration.NONE), 11,
+				SoilWaterProperties.vanGenuchtenFreeDrainage()), 1e-5);
+		ColumnBalance total = controller.diagnostics().total();
+		assertTrue("max energy closure " + controller.diagnostics().maxAbs().energyClosure(),
+				controller.diagnostics().maxAbs().energyClosure() < 1.0);
+		assertTrue("pending applied " + total.pendingApplied(), total.pendingApplied() > 1e4);
 	}
 
 	/**

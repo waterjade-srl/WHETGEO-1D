@@ -159,8 +159,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 						new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
 						TopCellThicknessCap.DEFAULT_MAX_THICKNESS, eos),
 				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit(), ThinSnow.none(), SkinNode.CAPPED,
-				// SNOW-7 agreed as COMPOUNDED; off until verified on the synthetic season (sub-stepping, refreezing)
-				ShortwavePenetration.NONE);
+				ShortwavePenetration.COMPOUNDED);
 	}
 
 	/** Same processes with another restratification policy. */

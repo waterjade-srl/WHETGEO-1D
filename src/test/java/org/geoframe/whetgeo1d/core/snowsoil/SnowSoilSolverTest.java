@@ -81,26 +81,35 @@ public class SnowSoilSolverTest {
 
 	/**
 	 * Rain on the cold pack (§6.6 "pioggia su manto freddo"): in the first hour
-	 * nothing reaches the soil; the rain warms the top cells to 0 °C, part of it
-	 * refreezes and the rest stays as retained liquid.
+	 * none of the rain reaches the soil; the rain warms the top cells to 0 °C,
+	 * part of it refreezes and the rest stays as retained liquid. What leaves
+	 * the bottom is the basal melt over a soil above 0 °C (warmed by the
+	 * shortwave crossing the early thin pack, SNOW-7), no more than in the hour
+	 * before.
 	 */
 	@Test
 	public void rainOnColdSnowRefreezesAndIsRetained() {
 		SnowSoilSolver solver = SEASON.solver(Configuration.RECOMMENDED);
 		int first = (int) (SyntheticSeason.RAIN_DAY * SyntheticSeason.DAY / SEASON.timeDelta());
+		double basalMelt = 0.0;
 		for (int k = 0; k <= first; k++) {
 			double[] soil = solver.soilTemperatures();
 			double liquidBefore = liquid(solver.snow());
 			StepForcing forcing = SEASON.forcing(k * SEASON.timeDelta(), soil[soil.length - 1]);
 			SnowSoilStepResult result = solver.step(forcing);
+			if (k == first - 1) {
+				basalMelt = result.soilInputMass();
+			}
 			if (k == first) {
 				assertTrue("pack below 0 °C before the rain", result.surfaceTemperature() < MELTING_TEMPERATURE - 1.0);
 				assertEquals(SyntheticSeason.RAIN_RATE, forcing.rainfall(), 0.0);
-				assertEquals(0.0, result.soilInputMass(), 0.0);
+				assertTrue("to the soil " + result.soilInputMass() + ", basal melt the hour before " + basalMelt,
+						result.soilInputMass() <= basalMelt + 1e-12);
 				assertTrue("refrozen " + result.refrozen(), result.refrozen() > 0.25 * forcing.rainfall());
 				double retained = liquid(result.snow()) - liquidBefore;
 				assertTrue("retained " + retained, retained > 0.25 * forcing.rainfall());
-				assertEquals(forcing.rainfall() - result.melt(), result.refrozen() + retained, 1e-9);
+				// the liquid of the pack: rain and melt in, refreezing and the drained water out
+				assertEquals(forcing.rainfall() + result.melt() - result.soilInputMass(), result.refrozen() + retained, 1e-9);
 			}
 		}
 	}

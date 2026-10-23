@@ -241,11 +241,17 @@ public class StepControllerTest {
 	 * Real non-convergence: surface sweeps capped at 2 with a tolerance they
 	 * cannot meet in an hour on the melting pack. The controller sub-steps,
 	 * every interval is accepted or stops loudly, and every accepted step met
-	 * the criteria.
+	 * the criteria. Without shortwave penetration: with it, in sunny hours the
+	 * top cell is warmed to 0 °C by the shortwave it absorbs while the skin stays
+	 * about 11 K colder, the first linearisation (at the start temperature of
+	 * the top cell) is 0.45 K from the solution at any step length, and
+	 * halving cannot help a sweep count capped at 3; four sweeps meet the
+	 * tolerance without sub-steps (the default is 20).
 	 */
 	@Test
 	public void surfaceNonConvergenceIsSubstepped() {
-		SnowSoilSolver solver = SEASON.solver(Configuration.RECOMMENDED, new SurfaceCoupling(3, 1e-3));
+		SnowSoilSolver solver = SEASON.solver(Configuration.RECOMMENDED,
+				p -> p.withSurfaceCoupling(new SurfaceCoupling(3, 1e-3)).withShortwavePenetration(ShortwavePenetration.NONE));
 		StepController controller = new StepController(solver,
 				StepControlSettings.defaults().withMaxHalvings(6), 0.0, "");
 		int steps = (int) (110 * SyntheticSeason.DAY / DT);
