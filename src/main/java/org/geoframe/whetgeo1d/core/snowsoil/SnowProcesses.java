@@ -53,14 +53,27 @@ import org.geoframe.whetgeo1d.snow.surface.SurfaceEnergyBalance;
  * @param surfaceCoupling       how the surface balance enters the heat step
  * @param thinSnow              GEOtop's soil roughness and emissivity under a
  *                              thin pack ({@link ThinSnow}); fidelity only
+ * @param skin                  the skin node of the surface balance, over snow
+ *                              and over bare soil ({@link SkinNode}, SURF-1/2)
  */
 public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
 		MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
 		double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
 		RestratificationPolicy restratification, PrecipitationTemperature precipitation,
-		SurfaceCoupling surfaceCoupling, ThinSnow thinSnow) {
+		SurfaceCoupling surfaceCoupling, ThinSnow thinSnow, SkinNode skin) {
 
-	/** Processes without a thin-snow regime. */
+	/** Processes without a skin node ({@link SkinNode#NONE}). */
+	public SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
+			MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
+			double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
+			RestratificationPolicy restratification, PrecipitationTemperature precipitation,
+			SurfaceCoupling surfaceCoupling, ThinSnow thinSnow) {
+		this(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction, slopeAngle,
+				percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
+				SkinNode.NONE);
+	}
+
+	/** Processes without a thin-snow regime and without a skin node. */
 	public SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBalance.Parameters surfaceBalance,
 			MoninObukhov turbulence, SnowAlbedo albedo, double restoringSnowfall, CompactionModel compaction,
 			double slopeAngle, LiquidWaterPercolation percolation, SnowSublimation.ThicknessRule sublimationThickness,
@@ -82,6 +95,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 		Objects.requireNonNull(precipitation, "precipitation");
 		Objects.requireNonNull(surfaceCoupling, "surfaceCoupling");
 		Objects.requireNonNull(thinSnow, "thinSnow");
+		Objects.requireNonNull(skin, "skin");
 		if (!(restoringSnowfall > 0.0)) {
 			throw new IllegalArgumentException("restoringSnowfall must be positive, got " + restoringSnowfall);
 		}
@@ -95,7 +109,8 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 	 * turbulence, albedo, compaction, rate-limited percolation, mass criterion
 	 * with no cap, sublimation at constant thickness, precipitation as GEOtop;
 	 * flat ground; surface balance implicit in the surface temperature, as
-	 * GEOtop solves it; GEOtop's thin-snow regime ({@link ThinSnow#geotop()}).
+	 * GEOtop solves it; GEOtop's thin-snow regime ({@link ThinSnow#geotop()});
+	 * GEOtop's skin node ({@link SkinNode#GEOTOP}).
 	 *
 	 * @param windHeight        height of the wind measurement [m]
 	 * @param temperatureHeight height of the air temperature measurement [m]
@@ -108,7 +123,7 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				new LiquidWaterPercolation(LiquidWaterPercolation.Parameters.geotop(), eos),
 				SnowSublimation.ThicknessRule.UNCHANGED,
 				new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
-				PrecipitationTemperature.GEOTOP, SurfaceCoupling.implicit(), ThinSnow.geotop());
+				PrecipitationTemperature.GEOTOP, SurfaceCoupling.implicit(), ThinSnow.geotop(), SkinNode.GEOTOP);
 	}
 
 	/**
@@ -116,7 +131,8 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 	 * balance, r_v capped, compaction with no minimum ice per cell, percolation
 	 * without the rate limiter, GEOtop's mass
 	 * criterion with the 2 cm cap on the top cell, precipitation at the wet-bulb
-	 * temperature. The open choices of document 008 keep GEOtop's behaviour
+	 * temperature, the skin node held at 0 °C over snow ({@link SkinNode#CAPPED},
+	 * SURF-2). The open choices of document 008 keep GEOtop's behaviour
 	 * (thickness unchanged by sublimation).
 	 */
 	public static SnowProcesses recommended(SnowEquationOfState eos, double windHeight, double temperatureHeight) {
@@ -129,30 +145,38 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				new TopCellThicknessCap(
 						new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
 						TopCellThicknessCap.DEFAULT_MAX_THICKNESS, eos),
-				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit());
+				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit(), ThinSnow.none(), SkinNode.CAPPED);
 	}
 
 	/** Same processes with another restratification policy. */
 	public SnowProcesses withRestratification(RestratificationPolicy policy) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, policy, precipitation, surfaceCoupling, thinSnow);
+				slopeAngle, percolation, sublimationThickness, policy, precipitation, surfaceCoupling, thinSnow, skin);
 	}
 
 	/** Same processes with another surface coupling. */
 	public SnowProcesses withSurfaceCoupling(SurfaceCoupling coupling) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling, thinSnow);
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, coupling, thinSnow, skin);
 	}
 
 	/** Same processes with another compaction. */
 	public SnowProcesses withCompaction(CompactionModel model) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, model,
-				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow);
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
+				skin);
 	}
 
 	/** Same processes with another thin-snow regime. */
 	public SnowProcesses withThinSnow(ThinSnow regime) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
-				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, regime);
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, regime, skin);
+	}
+
+	/** Same processes with another skin node (SURF-1/2; {@link SkinNode#NONE} for sensitivity runs). */
+	public SnowProcesses withSkin(SkinNode node) {
+		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
+				slopeAngle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
+				node);
 	}
 }

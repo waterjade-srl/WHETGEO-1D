@@ -129,6 +129,10 @@ final class SnowSoilColumn {
 		spaceDeltaZ[soilCells + n] = belowHalf;
 	}
 
+	double soilTopHalfCell() {
+		return soilTopHalfCell;
+	}
+
 	int soilCells() {
 		return soilCells;
 	}
