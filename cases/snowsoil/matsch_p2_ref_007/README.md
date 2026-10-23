@@ -111,7 +111,7 @@ Only with `Tsurface` imposed: SWnet, H and LE with snow (2.2, 3.7, 3.6 W m⁻² 
 
   This is not a porting error. The snow–soil conduction agrees within 1–2 W m⁻², and the fresh snow, the rain and the thin-cell rules are the same in both. The difference comes from three GEOtop behaviours that the port does not reproduce:
 
-  - its **skin node**, which cools below 0 °C over the melting pack and gains sensible heat and condensation (the port has `experimentalSkin`, off by default);
+  - its **skin node**, which cools below 0 °C over the melting pack and gains sensible heat and condensation (the port has it since round 4, `SkinNode`, on in fidelity);
   - a **ground albedo of 0 under snow**, a GEOtop error: `avis_ground` is only computed without snow (`energy.balance.cc:238, 455-486`), so thin snow has albedo 0.02–0.10;
   - **no melt shrinkage of cells below 0.1 W_c of ice** (`snow.cc:1093-1110`), so a thin pack stays thick and insulates the skin. The port shrinks every cell, by the SNOW-6 decision.
 
