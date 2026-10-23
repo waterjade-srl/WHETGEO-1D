@@ -92,32 +92,32 @@ Both runs take 3068 steps, every heat solve converges, and each runs in about 10
 
 GEOtop's `soilTz` here is its `SoilAveragedTempProfileFile`, the soil temperature averaged over the hour, and its point `Tsurface` is an hourly mean too. The column's `soilTzav.csv` and `Tsurface` are the matching means, so the comparison uses them. An earlier comparison used end-of-hour temperatures and showed a "faster thaw" of the top cells; that was this mismatch, not physics.
 
-The case's thin-snow keywords are passed in `geotopSnowParameters`: `SoilRoughness = 100`, `ThresSnowSoilRough = 100` and `SoilEmissiv = 0.96`. Fidelity also merges a single snow layer that melts away within a step into the soil, as GEOtop's `sux = -6`.
+The case's thin-snow keywords are passed in `geotopSnowParameters`: `SoilRoughness = 100`, `ThresSnowSoilRough = 100` and `SoilEmissiv = 0.96`. Fidelity also merges a single snow layer that melts away within a step into the soil, as GEOtop's `sux = -6`, and leaves a cell with at most 0.1 W_c of ice (1 kg m⁻² here) neither compacted nor shrunk by the melt, as GEOtop's `WBsnow` (`snow.cc:1093-1110`; the recommended configuration still shrinks every cell, SNOW-6). That rule changes thicknesses only: the column balance (VAL-7, printed at the end of each run) closes to 1·10⁻⁸ kg m⁻² and 0.02 J m⁻² in the worst step, all of it explained by the Richards and Newton residuals.
 
 **Within the tolerances (both runs):**
 
-- SWE RMSE: 0.06 mm with `Tsurface` imposed, 0.03 mm with the balance;
-- HS RMSE: 1.4–1.5 mm;
+- SWE RMSE: 0.07 mm with `Tsurface` imposed, 0.05 mm with the balance;
+- HS RMSE: 0.7–0.8 mm (1.4–1.5 mm while thin cells were shrunk);
 - LWnet with snow;
 - soil temperature at every depth: RMSE ≤ 0.09 K with `Tsurface` imposed, ≤ 0.16 K with the balance; |bias| ≤ 0.04 K;
 - maximum frost depth: same cell, 15 mm.
 
-Only with `Tsurface` imposed: SWnet, H and LE with snow (2.2, 3.7, 3.6 W m⁻² RMSE). Only with the balance: θw / θi of the top cell.
+Only with `Tsurface` imposed: SWnet, H and LE with snow (2.3, 3.7, 3.6 W m⁻² RMSE). Only with the balance: θw / θi of the top cell.
 
 **Beyond the tolerances:**
 
-- **HS max**, by 17–18 mm: GEOtop keeps the thickness of a melting single layer.
-- **SWE peak, melt and runoff** (peak +80 % / +33 %, melt −36 % / −41 %, runoff −26 % / −24 %, imposed / balance). On 2 November, snow and rain fall together at about 0 °C. GEOtop melts nearly all the fresh snow as it falls; the port's pack grows to 1.9 mm against 1.0 mm.
+- **HS max**, by 9 mm (17–18 mm while thin cells were shrunk): the port's pack peaks earlier and with more SWE.
+- **SWE peak, melt and runoff** (peak +86 % / +55 %, melt −39 % / −41 %, runoff −27 % / −25 %, imposed / balance). On 2 November, snow and rain fall together at about 0 °C. GEOtop melts nearly all the fresh snow as it falls; the port's pack grows to 1.9 mm against 1.0 mm.
 
-  This is not a porting error. The snow–soil conduction agrees within 1–2 W m⁻², and the fresh snow, the rain and the thin-cell rules are the same in both. The difference comes from three GEOtop behaviours that the port does not reproduce:
+  This is not a porting error. The snow–soil conduction agrees within 1–2 W m⁻², and the fresh snow, the rain and the thin-cell rules are the same in both. The difference comes from three GEOtop behaviours:
 
-  - its **skin node**, which cools below 0 °C over the melting pack and gains sensible heat and condensation (the port has `experimentalSkin`, off by default);
-  - a **ground albedo of 0 under snow**, a GEOtop error: `avis_ground` is only computed without snow (`energy.balance.cc:238, 455-486`), so thin snow has albedo 0.02–0.10;
-  - **no melt shrinkage of cells below 0.1 W_c of ice** (`snow.cc:1093-1110`), so a thin pack stays thick and insulates the skin. The port shrinks every cell, by the SNOW-6 decision.
+  - its **skin node**, which cools below 0 °C over the melting pack and gains sensible heat and condensation (being ported, on by default in fidelity; these runs are without it);
+  - a **ground albedo of 0 under snow**, a GEOtop error: `avis_ground` is only computed without snow (`energy.balance.cc:238, 455-486`), so thin snow has albedo 0.02–0.10. It is **not reproduced: a known difference** of the comparison, SWnet up to about 7 W m⁻² larger in the port over thin snow (6.3 W m⁻² in the worst hour with `Tsurface` imposed);
+  - **no melt shrinkage of cells below 0.1 W_c of ice** (`snow.cc:1093-1110`), so a thin pack stays thick and insulates the skin. Fidelity now does the same; alone it restores the depth but slightly lowers the melt (2.38 → 2.27 mm), since the skin is missing.
 
-  With all three switched on in a sensitivity run, the port follows GEOtop on this event: SWE peak 1.09 mm, melt 3.13 against 3.73 mm, and T_s, LWnet, H and LE with snow at 0.23 K, 0.4, 0.6 and 1.1 W m⁻² RMSE (table in notebook 6). The skin and the shrinkage of thin cells are design choices still to confirm for fidelity; the albedo is not reproduced.
+  With all three switched on in a sensitivity run, the port follows GEOtop on this event: SWE peak 1.09 mm, melt 3.13 against 3.73 mm, and T_s, LWnet, H and LE with snow at 0.23 K, 0.4, 0.6 and 1.1 W m⁻² RMSE (table in notebook 6). The committed runs have the thin-cell rule; the skin will change the numbers again; the albedo stays a known difference.
 - **Ts with snow:** 0.52 / 0.59 K RMSE.
-- **With the balance:** SWnet, H and LE with snow (7.3, 5.4, 9.0 W m⁻²), from hours with partial snow.
+- **With the balance:** SWnet, H and LE with snow (7.3, 5.4, 8.8 W m⁻²), from hours with partial snow.
 - **With `Tsurface` imposed:** θw / θi of the top cell.
 
 **LE with snow.** The thin-snow regime first made LE worse (11.1 → 14.9 W m⁻² RMSE). Almost all of that came from two hours on 12 October: a trace of snow that had melted in the step was kept as an all-liquid cell at +7 °C, evaporating at the rate of a wet surface (90–106 W m⁻² against GEOtop's 56–58). GEOtop merges such a layer into the soil, so this was a porting error. It is fixed with the merge in fidelity (`ThinSnow.mergesMeltedLayer`, `SnowSoilSolver`), and LE with snow is now 3.6 W m⁻² RMSE with `Tsurface` imposed.

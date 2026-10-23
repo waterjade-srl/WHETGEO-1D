@@ -48,4 +48,15 @@ public interface CompactionModel {
 	default List<SnowCell> capDensity(List<SnowCell> cells) {
 		return cells;
 	}
+
+	/**
+	 * Ice mass at or below which a cell, after the phase change of the step,
+	 * is neither compacted nor shrunk by the melt [kg m-2]: GEOtop's thin cells
+	 * ({@code simpl_snow · max_weq_snow}, {@code snow.cc:1093-1110}) in the
+	 * fidelity configuration; by default none (0: every cell with ice shrinks,
+	 * SNOW-6).
+	 */
+	default double thinCellIce() {
+		return 0.0;
+	}
 }

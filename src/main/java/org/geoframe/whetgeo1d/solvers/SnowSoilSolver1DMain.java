@@ -39,6 +39,7 @@ import java.util.Map;
 import org.geoframe.closureequation.closureequation.Parameters;
 import org.geoframe.whetgeo1d.core.boundaryconditions.IBoundaryCondition.DiffusionBoundaryConditionType;
 import org.geoframe.whetgeo1d.core.boundaryconditions.IBoundaryCondition.RichardsBoundaryConditionType;
+import org.geoframe.whetgeo1d.core.snowsoil.ColumnBalance;
 import org.geoframe.whetgeo1d.core.snowsoil.IceAwareRetention;
 import org.geoframe.whetgeo1d.core.snowsoil.NewtonSettings;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
@@ -776,6 +777,13 @@ public class SnowSoilSolver1DMain extends HMModel {
 			RunDiagnostics d = controller.diagnostics();
 			System.out.println("snowsoil: " + d.intervals() + " steps, " + d.substeps() + " accepted solver steps, "
 					+ d.rejections() + " rejected, " + d.degradedSteps() + " degraded");
+			ColumnBalance worst = d.maxAbs();
+			ColumnBalance total = d.total();
+			System.out.printf(java.util.Locale.ROOT,
+					"snowsoil: column balance (VAL-7), worst step %.3g kg m-2 and %.3g J m-2, run %.3g kg m-2 and"
+							+ " %.3g J m-2 (of which explained %.3g kg m-2 and %.3g J m-2)%n",
+					worst.massClosure(), worst.energyClosure(), total.massClosure(), total.energyClosure(),
+					total.explainedMassClosure(), total.explainedEnergyClosure());
 		}
 		if (activeWriters == null) {
 			return;

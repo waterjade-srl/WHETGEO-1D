@@ -527,19 +527,35 @@ public final class SnowSoilSolver {
 		heatStep = heat.step(start, top, forcing.bottomValue(), dt);
 		sweeps = 1;
 		surfaceConverged = !snowAtStart || imposedSnowTop || processes.surfaceCoupling().maxSweeps() == 1;
+		// a fixed point bracketed by the sweeps: below it the surface comes out warmer than linearised, above it
+		// colder; bisected once the sweeps alternate without contracting (a top cell melting out within the step)
+		double bracketLow = Double.NEGATIVE_INFINITY;
+		double bracketHigh = Double.POSITIVE_INFINITY;
+		double previousChange = Double.NaN;
+		boolean bisecting = false;
 		while (!surfaceConverged && sweeps < processes.surfaceCoupling().maxSweeps()) {
 			double[] temperatures = heatStep.temperatures();
 			double surfaceNow = temperatures[temperatures.length - 1];
-			if (Math.abs(surfaceNow - linearisedAt) <= processes.surfaceCoupling().temperatureTolerance()) {
+			double change = surfaceNow - linearisedAt;
+			if (Math.abs(change) <= processes.surfaceCoupling().temperatureTolerance()) {
 				surfaceConverged = true;
 				break;
 			}
-			SurfaceFluxes at = balance.evaluate(surfaceNow);
+			if (change > 0.0) {
+				bracketLow = Math.max(bracketLow, linearisedAt);
+			} else {
+				bracketHigh = Math.min(bracketHigh, linearisedAt);
+			}
+			bisecting |= change * previousChange < 0.0 && Math.abs(change) > 0.5 * Math.abs(previousChange);
+			previousChange = change;
+			double next = bisecting && Double.isFinite(bracketLow) && Double.isFinite(bracketHigh)
+					? 0.5 * (bracketLow + bracketHigh) : surfaceNow;
+			SurfaceFluxes at = balance.evaluate(next);
 			// G(T) = EB(T_k) + EB'(T_k) (T - T_k), written around T^n as the driver expects
 			lineSlope = at.derivative();
-			lineAtStart = at.energyBalance() + lineSlope * (startTemperature - surfaceNow);
+			lineAtStart = at.energyBalance() + lineSlope * (startTemperature - next);
 			top = new TopBoundary.SurfaceFlux(lineAtStart + pendingApplied / dt, lineSlope);
-			linearisedAt = surfaceNow;
+			linearisedAt = next;
 			heat.setSoilTemperatures(soilStart);
 			heatStep = heat.step(start, top, forcing.bottomValue(), dt);
 			sweeps++;
@@ -619,7 +635,9 @@ public final class SnowSoilSolver {
 
 		// 5: compaction and melt shrinkage, against the ice at the start of the step
 		cells = processes.compaction().compact(cells, dt, processes.slopeAngle());
-		cells = MeltShrinkage.apply(merged ? List.of() : start.subList(0, cells.size()), cells);
+		// thin cells keep their thickness in fidelity, as GEOtop (snow.cc:1093-1110)
+		cells = MeltShrinkage.apply(merged ? List.of() : start.subList(0, cells.size()), cells,
+				processes.compaction().thinCellIce());
 		// GEOtop's porosity cap after the shrinkage (fidelity; nothing in the recommended configuration)
 		cells = processes.compaction().capDensity(cells);
 

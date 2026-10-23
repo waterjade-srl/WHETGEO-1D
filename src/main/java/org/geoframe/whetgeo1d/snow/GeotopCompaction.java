@@ -235,6 +235,16 @@ public final class GeotopCompaction implements CompactionModel {
 	}
 
 	/**
+	 * The minimum ice of the compaction: in fidelity GEOtop's
+	 * {@code simpl_snow · max_weq_snow}, below which a cell is neither compacted
+	 * nor shrunk by the melt; 0 in the recommended configuration.
+	 */
+	@Override
+	public double thinCellIce() {
+		return parameters.minimumIceMass();
+	}
+
+	/**
 	 * GEOtop's porosity cap after the melt shrinkage ({@code snow.cc:1104-1110}),
 	 * with {@link Parameters#geotopCap()}: a cell holding more than the minimum
 	 * ice with w_i / (ρ_w D) &gt; θ_max gets D = w_i / (ρ_w θ_max), thinner or

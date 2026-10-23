@@ -43,15 +43,18 @@ import java.util.List;
  * {@code WBsnow} loop.
  *
  * <p>
- * Departures from GEOtop: GEOtop applies the rule only to cells holding more
- * than {@code simpl_snow · max_weq_snow} (0.5 kg m-2) of ice, together with the
- * compaction; here it applies to every cell that still holds some ice, in both
- * configurations (SNOW-6). The visible consequence: a thin melting pack, below
- * 0.5 kg m-2 of ice, keeps its thickness in GEOtop while its SWE goes to zero
- * (Matsch_P2_Ref_007, 2 November 2009: 23 mm of depth with 0.01 mm of SWE);
- * this is not physics and is deliberately not reproduced. A cell
- * left with no ice keeps its thickness, since a cell cannot have zero
- * thickness: the restratification removes it.
+ * GEOtop applies the rule only to cells holding more than
+ * {@code simpl_snow · max_weq_snow} (0.5 kg m-2 by default) of ice after the
+ * phase change, together with the compaction ({@code snow.cc:1093-1110}): a
+ * thin melting pack keeps its thickness while its SWE goes to zero
+ * (Matsch_P2_Ref_007, 2 November 2009: 23 mm of depth with 0.01 mm of SWE),
+ * and the thick, light layer insulates the surface from the melting snow. The
+ * fidelity configuration does the same ({@link #apply(List, List, double)} with
+ * {@link CompactionModel#thinCellIce()}, decision of 22 October 2026); the
+ * recommended one shrinks every cell that still holds ice (SNOW-6). The rule
+ * changes only thicknesses, never masses or energies. A cell left with no ice
+ * keeps its thickness, since a cell cannot have zero thickness: the
+ * restratification removes it.
  */
 public final class MeltShrinkage {
 
@@ -82,13 +85,26 @@ public final class MeltShrinkage {
 	 * @param after  the same cells after it, index 0 at the bottom
 	 */
 	public static List<SnowCell> apply(List<SnowCell> before, List<SnowCell> after) {
+		return apply(before, after, 0.0);
+	}
+
+	/**
+	 * Shrinkage of a whole column, cell by cell, sparing the thin cells.
+	 *
+	 * @param before   the column before the phase change
+	 * @param after    the same cells after it, index 0 at the bottom
+	 * @param thinIce  ice mass at or below which a cell, after the phase change,
+	 *                 keeps its thickness [kg m-2]; 0: every cell shrinks
+	 */
+	public static List<SnowCell> apply(List<SnowCell> before, List<SnowCell> after, double thinIce) {
 		if (before.size() != after.size()) {
 			throw new IllegalArgumentException(
 					"columns differ in size: " + before.size() + " and " + after.size());
 		}
 		List<SnowCell> result = new ArrayList<>(after.size());
 		for (int i = 0; i < after.size(); i++) {
-			result.add(apply(before.get(i).iceMass(), after.get(i)));
+			SnowCell cell = after.get(i);
+			result.add(cell.iceMass() > thinIce ? apply(before.get(i).iceMass(), cell) : cell);
 		}
 		return List.copyOf(result);
 	}

@@ -182,7 +182,11 @@ public class SnowSoilSolverTest {
 			assertEquals("energy, step " + k, 0.0, s.energyClosure()[k], 1e-6);
 			assertTrue("heat step " + k + " converged", s.converged()[k]);
 			assertTrue("surface sweeps, step " + k, s.surfaceConverged()[k]);
-			assertEquals("linearisation, step " + k, 0.0, s.linearisation()[k], 1e-1);
+			// GEOtop's λ switches from sublimation to evaporation at 0 °C: a surface converged onto the switch
+			// leaves the jump of λE (< 1 W m-2) as linearisation energy, recorded in the balance
+			boolean onTheSwitch = Math.abs(s.surfaceTemperature()[k] - MELTING_TEMPERATURE) < 1e-5;
+			assertEquals("linearisation, step " + k, 0.0, s.linearisation()[k],
+					onTheSwitch ? SEASON.timeDelta() : 1e-1);
 		}
 		// on the cold nights of the first 80 days the skin is colder than the centre of the top cell
 		SnowSoilSolver again = SEASON.solver(Configuration.FIDELITY);
