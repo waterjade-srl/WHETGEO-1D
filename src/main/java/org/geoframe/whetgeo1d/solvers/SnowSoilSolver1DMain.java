@@ -637,6 +637,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	/*
 	 * STEP CONTROL AND RESTART (SOL-5, ARCH-5)
 	 */
+	@Description("Experimental: a skin node over snow as GEOtop's default surface node (SnowSoilSolver.setSkin); off by default.")
+	@In
+	public boolean experimentalSkin = false;
+
 	@Description("Halvings of a step that does not converge before giving up (SOL-5).")
 	@In
 	public int maxHalvings = 4;
@@ -956,6 +960,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 		NewtonSettings newton = new NewtonSettings(heatTolerance, NewtonSettings.defaults().roundOffSafety(),
 				heatMaxIterations, heatPicardIterations);
 		solver = new SnowSoilSolver(soil, water, heat, bottomType, newton, processes, List.of(), 0.0);
+		solver.setSkin(experimentalSkin);
 
 		site = SolarGeometry.ofDegrees(latitude, longitude, standardTime);
 		clouds = CloudTransmissivity.flat(site);
@@ -987,6 +992,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("stabilityCorrection", processes.turbulence().parameters().stability().name());
 		attributes.put("maxSnowCells", Integer.toString(capacity));
 		attributes.put("alphaSnow", Double.toString(alphaSnow));
+		if (experimentalSkin) {
+			attributes.put("experimentalSkin", "true");
+		}
 		if (geotopSnowParameters != null && !geotopSnowParameters.isBlank()) {
 			attributes.put("geotopSnowParameters", geotopSnowParameters.trim());
 		}
