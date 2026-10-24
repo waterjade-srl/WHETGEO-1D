@@ -13,8 +13,15 @@ permissions:
   contents: read
 
 jobs:
+  # The contract asks for Linux, macOS and Windows (VAL-5, proposed, to be agreed with the Rigon group): the whole
+  # suite runs on the three, with its tolerances. The bit-for-bit baselines (tools/golden_baseline.sh,
+  # tools/snow_regression.sh) depend on the machine setup and are checked by hand on Linux.
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
