@@ -121,6 +121,37 @@ public class ConstructedCasesTest {
 	}
 
 	/**
+	 * The same snowfall across a restart: the state written after the first
+	 * snowfall and read back into a new solver goes on to the bit, and the
+	 * second snowfall keeps the surface cell within the cap in the resumed run.
+	 */
+	@Test
+	public void heavySnowfallAcrossARestart() throws java.io.IOException {
+		UniformSoil soil = new UniformSoil(20, 1.0, -1.0, 270.15, "Weighted Harmonic Mean");
+		StepController continuous = new StepController(solver(soil, null), StepControlSettings.defaults(), 0.0,
+				"recommended");
+		StepController resumed = null;
+		for (int k = 0; k < 48; k++) {
+			if (k == 12) {
+				byte[] bytes = continuous.checkpoint().toBytes();
+				resumed = StepController.resume(solver(soil, null), StepControlSettings.defaults(),
+						SnowSoilRestart.fromBytes(bytes), "recommended");
+			}
+			double snowfall = k == 0 || k == 24 ? 40.0 : 0.0;
+			StepForcing forcing = new StepForcing(night(263.15), snowfall, 0.0, 0.2, 0.2,
+					new TopBoundary.SurfaceTemperature(263.15), 270.15, STEP);
+			continuous.advance(forcing);
+			if (resumed != null) {
+				resumed.advance(forcing);
+				assertTrue("step " + k, continuous.solver().snapshot().bitwiseEquals(resumed.solver().snapshot()));
+				List<SnowCell> snow = resumed.solver().snow();
+				assertTrue("step " + k, snow.get(snow.size() - 1).thickness() <= TopCellThicknessCap.DEFAULT_MAX_THICKNESS
+						* (1.0 + TopCellThicknessCap.TOLERANCE));
+			}
+		}
+	}
+
+	/**
 	 * A pack vanishing over an impermeable soil (SOIL-4): 3 kg m-2 melt out in
 	 * the sun on a saturated soil with a negligible conductivity. What leaves the
 	 * pack is released to Richards in the same step and, unable to infiltrate,
