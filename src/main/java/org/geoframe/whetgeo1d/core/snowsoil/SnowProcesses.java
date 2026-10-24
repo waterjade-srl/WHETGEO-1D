@@ -159,7 +159,9 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 						new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
 						TopCellThicknessCap.DEFAULT_MAX_THICKNESS, eos),
 				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit(), ThinSnow.none(), SkinNode.CAPPED,
-				ShortwavePenetration.COMPOUNDED);
+				// SNOW-7: COMPOUNDED agreed, off for now: with the 2 cm surface cell it does not converge in the
+				// time step at hourly steps (the surface cell melts under a cold skin); to be revised
+				ShortwavePenetration.NONE);
 	}
 
 	/** Same processes with another restratification policy. */

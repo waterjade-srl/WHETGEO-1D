@@ -2,7 +2,7 @@
 # Runs the Friuli case on the given stations (default: all four), from the root of the repository.
 #   cases/snowsoil/friuli/run_all.sh [1 2 3 4]
 #   STABILITY="Unstable only" cases/snowsoil/friuli/run_all.sh    (sensitivity: GEOtop MoninObukhov = 2)
-#   SW=None cases/snowsoil/friuli/run_all.sh                       (sensitivity: no shortwave penetration, SNOW-7)
+#   SW=Compounded cases/snowsoil/friuli/run_all.sh                 (sensitivity: compounded shortwave penetration, SNOW-7)
 #   K=Sturm_1997 cases/snowsoil/friuli/run_all.sh                  (snow conductivity law, SNOW-2)
 #   ALPHA=1e3 cases/snowsoil/friuli/run_all.sh                     (steepness of the snow phase-change curve, STA-4)
 # Writes output/station_<n>/ (NetCDF, GEOtop-like CSV) and output/station_<n>.log, and prints the

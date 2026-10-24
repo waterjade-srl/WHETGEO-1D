@@ -32,7 +32,7 @@ import oms3.SimBuilder as OMS3
 def station = (System.getProperty("station") ?: "1") as int
 // optional: -Dstability="Unstable only" (GEOtop MoninObukhov = 2, the option of the GEOtop runs); empty: the configuration's
 def stability = System.getProperty("stability") ?: ""
-// optional: -DshortwavePenetration=None (all the net shortwave at the surface, SNOW-7); empty: the configuration's
+// optional: -DshortwavePenetration=Compounded (shortwave absorbed in the pack, SNOW-7); empty: the configuration's (None)
 def shortwavePenetration = System.getProperty("shortwavePenetration") ?: ""
 // optional: -DsnowConductivity=Sturm_1997 | Jordan_1991 | Calonne_2011 | Cosenza (SNOW-2); empty: the configuration's
 def snowConductivity = (System.getProperty("snowConductivity") ?: "").replace("_", " ")
