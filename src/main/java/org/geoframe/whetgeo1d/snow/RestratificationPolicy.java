@@ -32,4 +32,14 @@ public interface RestratificationPolicy {
 	 * @param cells the column, index 0 at the bottom
 	 */
 	Restratified apply(List<SnowCell> cells);
+
+	/**
+	 * Whether the fresh snow of the step is deposited before this policy
+	 * restratifies (COL-5): false for GEOtop's order (restratification, then
+	 * fresh snow), true when the grid passed to the next heat solve must
+	 * already hold the step's snowfall within the policy's limits.
+	 */
+	default boolean afterFreshSnow() {
+		return false;
+	}
 }

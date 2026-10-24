@@ -32,7 +32,7 @@ import org.junit.Test;
  * 900 s against a 450 s run. The forcing is the same function of time at every
  * step length, the precipitation the same per hour.
  * <p>
- * Measured (SWE RMSE on the hourly values): recommended 1.31 / 0.48 / 0.18 mm,
+ * Measured (SWE RMSE on the hourly values): recommended 1.26 / 0.52 / 0.21 mm,
  * fidelity 15.5 / 3.95 / 0.94 mm. The fidelity error at hourly steps is
  * GEOtop's shortwave penetration (SNOW-7), absorbed in the surface layer while
  * the skin gets none: 2.9 mm without it.

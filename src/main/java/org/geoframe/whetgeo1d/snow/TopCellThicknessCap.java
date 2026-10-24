@@ -128,6 +128,12 @@ public final class TopCellThicknessCap implements RestratificationPolicy {
 		return new Restratified(cells, released, merges, splits);
 	}
 
+	/** Fresh snow first, then the cap (COL-5): the next heat solve sees a surface cell within it. */
+	@Override
+	public boolean afterFreshSnow() {
+		return true;
+	}
+
 	/** Splits a surface cell off the top cell when it is thick enough; returns the splits done. */
 	private int capTop(List<SnowCell> cells) {
 		if (cells.isEmpty()) {

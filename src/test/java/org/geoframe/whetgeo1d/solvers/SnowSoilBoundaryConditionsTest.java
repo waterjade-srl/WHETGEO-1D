@@ -198,9 +198,10 @@ public class SnowSoilBoundaryConditionsTest {
 	}
 
 	/**
-	 * Neumann over snow (COL-6): a constant flux out of a cold pack, no melt and
-	 * no vapour exchange; snow and soil together lose exactly q Δt, the bottom
-	 * being insulated.
+	 * Neumann over snow (COL-6): a constant flux out of a cold pack, no vapour
+	 * exchange; snow and soil together lose exactly q Δt, the bottom being
+	 * insulated, besides what the basal melt over the 5 °C soil carries out of
+	 * the column (the soil water is fixed, so the melt water leaves it).
 	 */
 	@Test
 	public void snowTopNeumannBudget() throws Exception {
@@ -211,15 +212,21 @@ public class SnowSoilBoundaryConditionsTest {
 		c.snowTopType = "Neumann";
 		c.snowTopValue = -30.0;
 		double[] e = new double[1];
+		double[] drained = new double[2];
 		int steps = 72;
 		run(c, steps, k -> snowfallFirstHours(c, k), k -> {
 			if (k == 3) {
 				e[0] = totalEnergy(c);
 			}
+			if (k > 3) {
+				drained[0] += c.outStepResult.soilInputMass();
+				drained[1] += c.outStepResult.soilInputEnergy();
+			}
 		});
 		assertTrue(c.outSnowCells > 0);
-		assertEquals(30.0, c.outSnowWaterEquivalent, 1e-9);
-		double expected = -30.0 * DT * (steps - 3);
+		assertTrue("basal melt " + drained[0], drained[0] < 0.01 * 30.0);
+		assertEquals(30.0, c.outSnowWaterEquivalent + drained[0], 1e-9);
+		double expected = -30.0 * DT * (steps - 3) - drained[1];
 		assertEquals(expected, totalEnergy(c) - e[0], 1e-6 * Math.abs(expected) + 1.0);
 	}
 

@@ -33,6 +33,7 @@ import org.geoframe.whetgeo1d.snow.LiquidWaterPercolation;
 import org.geoframe.whetgeo1d.snow.MeltShrinkage;
 import org.geoframe.whetgeo1d.snow.Percolated;
 import org.geoframe.whetgeo1d.snow.Restratified;
+import org.geoframe.whetgeo1d.snow.RestratificationPolicy;
 import org.geoframe.whetgeo1d.snow.SnowCell;
 import org.geoframe.whetgeo1d.snow.SnowColumn;
 import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
@@ -781,22 +782,28 @@ public final class SnowSoilSolver {
 			soilInputEnergy = 0.0;
 		}
 
-		// 7: restratification
-		Restratified restratified = processes.restratification().apply(cells);
+		// 7-8: restratification and fresh snow, in the order of the policy (COL-5): GEOtop's restratifies
+		// first; with the top-cell cap the fresh snow comes first, so that the next heat solve sees the cap
+		RestratificationPolicy policy = processes.restratification();
+		double snowfallEnergy = 0.0;
+		SnowCell fresh = null;
+		if (forcing.snowfall() > 0.0) {
+			fresh = FreshSnow.cell(forcing.snowfall(),
+					FreshSnow.geotopDensity(forcing.surface().airTemperature(), forcing.surface().windSpeed()),
+					processes.precipitation().snow(forcing.surface(), forcing.precipitationTemperature()));
+			snowfallEnergy = fresh.internalEnergy();
+		}
+		if (fresh != null && policy.afterFreshSnow()) {
+			cells = SnowColumn.depositFreshSnow(cells, fresh, eos);
+		}
+		Restratified restratified = policy.apply(cells);
 		cells = restratified.cells();
 		if (restratified.releasedToSoil().isPresent()) {
 			SnowCell released = restratified.releasedToSoil().get();
 			toSoilMass += released.totalMass();
 			toSoilEnergy += released.internalEnergy();
 		}
-
-		// 8: fresh snow
-		double snowfallEnergy = 0.0;
-		if (forcing.snowfall() > 0.0) {
-			SnowCell fresh = FreshSnow.cell(forcing.snowfall(),
-					FreshSnow.geotopDensity(forcing.surface().airTemperature(), forcing.surface().windSpeed()),
-					processes.precipitation().snow(forcing.surface(), forcing.precipitationTemperature()));
-			snowfallEnergy = fresh.internalEnergy();
+		if (fresh != null && !policy.afterFreshSnow()) {
 			cells = SnowColumn.depositFreshSnow(cells, fresh, eos);
 		}
 
