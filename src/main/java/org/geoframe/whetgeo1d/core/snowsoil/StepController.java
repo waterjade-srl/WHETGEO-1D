@@ -158,6 +158,7 @@ public final class StepController {
 	private Consumer<SnowSoilRestart> restartSink;
 	private double time;
 	private RunDiagnostics diagnostics;
+	private VanishedPacks vanishedPacks = new VanishedPacks(0, 0.0, 0.0);
 	private ColumnBalance.Storage storage;
 	private boolean degradedInterval;
 
@@ -245,6 +246,22 @@ public final class StepController {
 	}
 
 	/**
+	 * Packs too thin to keep, released to the soil (SOIL-4), in the accepted
+	 * steps since this controller started (a restart starts them again).
+	 *
+	 * @param events number of releases
+	 * @param mass   their total mass [kg m-2]
+	 * @param energy their total internal energy [J m-2]
+	 */
+	public record VanishedPacks(long events, double mass, double energy) {
+	}
+
+	/** Packs released to the soil so far (SOIL-4). */
+	public VanishedPacks vanishedPacks() {
+		return vanishedPacks;
+	}
+
+	/**
 	 * The rejections of the run, in order, at most
 	 * {@link StepControlSettings#maxLoggedRejections()} of them (the count is in
 	 * {@link #diagnostics()}).
@@ -271,6 +288,7 @@ public final class StepController {
 		Objects.requireNonNull(forcing, "forcing");
 		SnowSoilState start = solver.snapshot();
 		RunDiagnostics startDiagnostics = diagnostics;
+		VanishedPacks startVanished = vanishedPacks;
 		ColumnBalance.Storage startStorage = storage;
 		List<Accepted> accepted = new ArrayList<>(1);
 		List<StepRejection> rejected = new ArrayList<>(0);
@@ -280,6 +298,7 @@ public final class StepController {
 		} catch (StepNotConvergedException e) {
 			solver.restore(start);
 			storage = startStorage;
+			vanishedPacks = startVanished;
 			RunDiagnostics failed = startDiagnostics;
 			for (int k = 0; k < rejected.size(); k++) {
 				failed = failed.withRejection();
@@ -365,6 +384,10 @@ public final class StepController {
 		ColumnBalance balance = ColumnBalance.of(before, after, forcing, result, terms);
 		storage = after;
 		diagnostics = diagnostics.withStep(balance, degraded);
+		if (terms.vanishedMass() > 0.0) {
+			vanishedPacks = new VanishedPacks(vanishedPacks.events() + 1, vanishedPacks.mass() + terms.vanishedMass(),
+					vanishedPacks.energy() + terms.vanishedEnergy());
+		}
 		accepted.add(new Accepted(forcing, result, balance));
 	}
 

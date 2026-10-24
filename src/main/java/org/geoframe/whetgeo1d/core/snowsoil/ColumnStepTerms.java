@@ -45,8 +45,11 @@ package org.geoframe.whetgeo1d.core.snowsoil;
  *                             without soil water
  * @param soilSinkEnergy       energy leaving the soil with evapotranspiration;
  *                             NaN without soil water
+ * @param vanishedMass         mass of a pack too thin to keep, released to the
+ *                             soil in this step (SOIL-4); zero without one
+ * @param vanishedEnergy       its internal energy
  */
 public record ColumnStepTerms(double pendingApplied, double phaseMismatchEnergy, double surfaceChange,
 		int heatWorstCell, double rainOnBareSoilMass, double rainOnBareSoilEnergy, double infiltrationEnergy,
-		double soilSinkEnergy) {
+		double soilSinkEnergy, double vanishedMass, double vanishedEnergy) {
 }

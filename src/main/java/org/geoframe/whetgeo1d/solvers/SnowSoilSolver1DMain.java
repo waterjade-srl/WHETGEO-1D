@@ -794,6 +794,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 							+ " %.3g J m-2 (of which explained %.3g kg m-2 and %.3g J m-2)%n",
 					worst.massClosure(), worst.energyClosure(), total.massClosure(), total.energyClosure(),
 					total.explainedMassClosure(), total.explainedEnergyClosure());
+			StepController.VanishedPacks vanished = controller.vanishedPacks();
+			System.out.printf(java.util.Locale.ROOT,
+					"snowsoil: %d vanishing packs released to the soil (SOIL-4), %.3g kg m-2 and %.3g J m-2%n",
+					vanished.events(), vanished.mass(), vanished.energy());
 		}
 		if (activeWriters == null) {
 			return;

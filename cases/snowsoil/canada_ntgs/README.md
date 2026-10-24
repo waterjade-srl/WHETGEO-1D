@@ -114,7 +114,7 @@ Full tables and figures are in the notebook. In short (porting − GEOtop, 01/09
 | NTGS2 ERA5 | 0.33 / 0.45 mm | 85.7/85.1, 98.9/98.3 mm | 0, 0 d | −0.01 K | +0.02 / +0.07 / −0.01 K | 758/742, 915/889 mm |
 | NTGS2 JRA-3Q | 0.71 / 1.01 mm | 92.9/91.1, 125/124 mm | 0, 0 d | −0.01 K | +0.06 / +0.10 / +0.02 K | 702/685, 845/819 mm |
 
-The daily soil RMSE is 0.23–0.35 K at 0.1–1 m and 0.10–0.13 K at 4 m. What is left: the soil at 0.5–1 m is up to 0.5–0.8 K warmer in January–February, the top 0.1 m up to 0.35 K colder in November–December, and the summer thaw 16–26 mm deeper. A case takes 65–95 s; NTGS1 JRA-3Q and NTGS2 JRA-3Q have 1 and 3 rejected steps, each accepted after halving.
+The daily soil RMSE is 0.23–0.35 K at 0.1–1 m and 0.10–0.13 K at 4 m. What is left: the soil at 0.5–1 m is up to 0.5–0.8 K warmer in January–February, the top 0.1 m up to 0.35 K colder in November–December, and the summer thaw 16–26 mm deeper. A case takes 65–95 s, with no rejected step. The 1 and 3 steps of NTGS1 JRA-3Q and NTGS2 JRA-3Q that were rejected and halved were surface sweeps alternating across 0 °C, where the balance over snow jumps (sublimation below, evaporation above); the solver now treats them as a skin at 0 °C (found by the ARF_1D snow regression).
 
 How the gap closed, step by step (soil bias at 0.1 / 1 / 4 m, NTGS1 ERA5):
 

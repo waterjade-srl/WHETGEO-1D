@@ -426,7 +426,12 @@ public final class SnowSoilSolver {
 		if (node.active() && conductance > 0.0 && Double.isFinite(conductance)) {
 			SurfaceSolve skin = skinSweeps(cells, balance, startTemperature, conductance, pendingFlux, bottomValue, dt,
 					soilStart);
-			if (!overSnow || skin.surfaceTemperature() <= MELTING_TEMPERATURE) {
+			// over snow the balance jumps at 0 °C (sublimation below, evaporation above): sweeps that alternate
+			// across it without converging have no fixed point on either side, the skin is at 0 °C and is treated
+			// as one that rose above it
+			boolean acrossMelting = !skin.converged()
+					&& (skin.linearisedAt() - MELTING_TEMPERATURE) * (skin.surfaceTemperature() - MELTING_TEMPERATURE) < 0.0;
+			if (!overSnow || skin.surfaceTemperature() <= MELTING_TEMPERATURE && !acrossMelting) {
 				return skin;
 			}
 			heat.setSoilTemperatures(soilStart);
@@ -798,10 +803,21 @@ public final class SnowSoilSolver {
 		}
 		Restratified restratified = policy.apply(cells);
 		cells = restratified.cells();
+		double vanishedMass = 0.0;
+		double vanishedEnergy = 0.0;
 		if (restratified.releasedToSoil().isPresent()) {
+			// SOIL-4: a pack too thin to keep goes to the soil with its mass and energy, in both configurations
+			// (GEOtop sets it to zero; below 1e-6 W_c the difference is at most 1e-5 kg m-2 per event)
 			SnowCell released = restratified.releasedToSoil().get();
-			toSoilMass += released.totalMass();
-			toSoilEnergy += released.internalEnergy();
+			vanishedMass = released.totalMass();
+			vanishedEnergy = released.internalEnergy();
+			if (vanishedMass > MAX_VANISHED_MASS) {
+				throw new IllegalStateException(String.format(java.util.Locale.ROOT,
+						"a vanishing pack of %.3g kg m-2, above the admissible %.3g kg m-2", vanishedMass,
+						MAX_VANISHED_MASS));
+			}
+			toSoilMass += vanishedMass;
+			toSoilEnergy += vanishedEnergy;
 		}
 		if (fresh != null && !policy.afterFreshSnow()) {
 			cells = SnowColumn.depositFreshSnow(cells, fresh, eos);
@@ -885,7 +901,7 @@ public final class SnowSoilSolver {
 
 		snow = cells;
 		lastTerms = new ColumnStepTerms(pendingApplied, phaseMismatch, surfaceChange, heatWorstCell, soilInputMass,
-				soilInputEnergy, infiltrationEnergy, soilSinkEnergy);
+				soilInputEnergy, infiltrationEnergy, soilSinkEnergy, vanishedMass, vanishedEnergy);
 		SnowBudget budget = SnowBudget.of(massBefore, SnowColumn.totalMass(cells), forcing.snowfall(), rainIntoPack,
 				vapour, toSoilMass, energyBefore, SnowColumn.internalEnergy(cells), heatEnergy, snowfallEnergy,
 				rainEnergy, vapourEnergy, toSoilEnergy);
@@ -906,6 +922,12 @@ public final class SnowSoilSolver {
 
 	/** Ice below which GEOtop's single snow layer counts as melted away [kg m-2] ({@code energy.balance.cc:2137}). */
 	static final double MERGED_LAYER_ICE = 1e-5;
+	/**
+	 * Largest mass of a vanishing pack released to the soil in one step (SOIL-4)
+	 * [kg m-2]: the restratification policies release a pack below 10⁻⁶ W_c, so
+	 * a larger release is an error of the state, and the step is rejected.
+	 */
+	public static final double MAX_VANISHED_MASS = 1e-3;
 
 	private static double ice(List<SnowCell> cells) {
 		double sum = 0.0;
