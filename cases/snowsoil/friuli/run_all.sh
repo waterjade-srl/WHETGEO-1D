@@ -13,7 +13,8 @@ ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 CASE=$ROOT/cases/snowsoil/friuli
 OMS=${OMS_JAR:-$HOME/.m2/repository/edu/colostate/omslab/oms/3.5.12/oms-3.5.12.jar}
 cd "$ROOT"
-[ -f target/cp.txt ] || mvn -q -o compile dependency:build-classpath -Dmdep.outputFile=target/cp.txt
+# always compile: a stale target/classes would run old code
+mvn -q -o compile dependency:build-classpath -Dmdep.outputFile=target/cp.txt
 mkdir -p "$CASE/output"
 STATIONS=${*:-1 2 3 4}
 for s in $STATIONS; do
