@@ -176,11 +176,35 @@ Every output starts with the run header:
 
 To read the outputs, open `Jupyter_Notebook/5_WHETGEO1D_SnowSoil_Outputs.ipynb`. Its helpers are in `Jupyter_Notebook/WHETGEO1D_SnowSoilOutputs.py`: `read_netcdf`, `read_header`, `read_csv`, `plot_snow_cells`, `plot_soil_profile`.
 
-For chaining with other components, the main results are also `@Out` fields: `outSnowWaterEquivalent`, `outSnowDepth`, `outSnowCells`, `outSurfaceTemperature`, `outSoilTemperature`, `outSoilSuction`, `outSoilIce`, `outSoilInput`, `outRainfall`, `outSnowfall`, `outPressure`, `outLongwaveIn`, `outCloudTransmissivity`, `outStepResult`, `outRunHeader` and `outRunDiagnostics`.
+For chaining with other components, the main results are also `@Out` fields: `outSnowWaterEquivalent`, `outSnowDepth`, `outSnowCells`, `outSurfaceTemperature`, `outSoilTemperature`, `outSoilSuction`, `outSoilIce`, `outSoilInput`, `outRainfall`, `outSnowfall`, `outPressure`, `outLongwaveIn`, `outCloudTransmissivity`, `outStepResult`, `outRunHeader` and `outRunDiagnostics`; for GEOET, `outBareSoilNetRadiation` and `outSoilHeatFlux` (see *With other GEOframe components*).
 
 The component prints every rejected step (`snowsoil: heat not accepted at t = ...`) and, at the end, a summary line: steps, accepted solver steps, rejected, degraded.
+
+## With other GEOframe components
+
+The column runs in a `.sim` next to GEOframe components; what has been tried so far (October 2026):
+
+- **GEOET, soil evaporation (LINK-2): works.** `cases/snowsoil/arf_1d/snowsoil_arf_1d_geoet.sim` and `run_geoet.sh`.
+  - GEOET's `PMEvaporationFromSoilSolverMain` gives `outEvaporation` (via `OutputWriterMain`) to `inEvaporation`.
+  - The column gives GEOET the net radiation and the heat flux into the soil of the bare soil, through a `feedback` connection (the previous step): `outBareSoilNetRadiation`, `outSoilHeatFlux`, GEOframe series keyed by `stationID`, −9999 under snow.
+  - GEOET has to be compiled against this project's GeoTools 34; `run_geoet.sh` does it with three renamed imports.
+  - GEOET is hourly only: its Penman–Monteith coefficient is right only for steps of exactly 3600 s.
+- **ShortWaveRadiationBalance, the shortwave on slopes (LINK-4): not linked yet.** The point case of GEOframe's component runs on the Friuli DEM once ported to the current hortonmachine:
+  - imports from jgrasstools, JTS, JAI and GeoTools updated;
+  - two calls changed;
+  - a `TOWGS84` added to the `.prj` of the inputs.
+
+  Three gaps remain before its outputs can go to `inShortwaveDirect`, `inShortwaveDiffuse` and `inCosIncidence`:
+  - it gives only the **clear-sky** shortwave. For a station that measures it, the measured global shortwave is split by GEOframe's decomposition models; for a station without it, as in Friuli, no GEOframe component applies a cloud transmissivity on a slope;
+  - it takes the hour angle from the **UTC hour without the longitude**, so it needs the dates in solar time, 51 minutes later in Friuli;
+  - it does not output the cosine of the incidence of the beam, which the snow albedo uses.
+
+  Until then, the column runs on flat ground; the temporary fidelity tools (`core/snowsoil/fidelity`, `SlopeShortwave`) give the shortwave on a slope as GEOtop computes it.
 
 ## Cases
 
 - `synthetic_season/`: the synthetic season of the example above.
-- `friuli/`: four stations of the Friuli Venezia Giulia network, 1 November 2025 – 1 May 2026, recommended configuration, heat only, against the observed snow depth (VAL-3). `make_inputs.py` writes the forcing from the SMET files of the MobyGIS-GEOtop run, `run_all.sh` runs the four stations (`-Dstation=n` in the `.sim`), `friuli_comparison.ipynb` compares with the observations, GEOtop 3.0 and MobyGIS (`compare.py`).
+- `friuli/`: the example from station data, explained in its `README.md`. Four stations of the Friuli Venezia Giulia network, 1 November 2025 – 1 May 2026, recommended configuration, heat only, against the observed snow depth (VAL-3). `make_inputs.py` writes the forcing from the SMET files of the MobyGIS-GEOtop run, `run_all.sh` runs the four stations (`-Dstation=n` in the `.sim`), `friuli_comparison.ipynb` compares with the observations, GEOtop 3.0 and MobyGIS (`compare.py`).
+- `matsch_p2_ref_007/`: GEOtop 3.0's official 1D test, fidelity against GEOtop with the approved VAL-1 tolerances; notebook `Jupyter_Notebook/6_Matsch_P2_Ref_007_Fidelity.ipynb`.
+- `canada_ntgs/`: the NTGS1/NTGS2 boreholes, ERA5 and JRA-3Q, fidelity, heat only, against GEOtop 3.0; notebook `Jupyter_Notebook/7_Canada_NTGS_Fidelity.ipynb`.
+- `arf_1d/`: one season of GEOtop's ARF_1D, the snow regression of `tools/snow_regression.sh`, and the run with GEOET's soil evaporation (`run_geoet.sh`).

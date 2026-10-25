@@ -11,7 +11,9 @@
 import oms3.SimBuilder as OMS3
 
 def startDate = "2001-09-01 10:00"
-def endDate   = "2002-06-15 09:00"
+// -DendDate, -Doutput: another end (the inputs run to 2002-09-01 09:00) and output folder; the regression uses the defaults
+def endDate   = System.getProperty("endDate") ?: "2002-06-15 09:00"
+def output    = System.getProperty("output") ?: "output"
 def timestep  = 60
 
 new OMS3().sim(name: "snowsoil_arf_1d") {
@@ -141,7 +143,7 @@ new OMS3().sim(name: "snowsoil_arf_1d") {
             "snowsoil.bottomBCValue"          0.0
             "snowsoil.soilWaterBottomType"    "Bottom Free Drainage"
             "snowsoil.inputFiles"             "$oms_prj/forcing.properties,$oms_prj/geotop/meteo0001.txt,$oms_prj/geotop/horizon0001.txt"
-            "snowsoil.outputPath"             "$oms_prj/output"
+            "snowsoil.outputPath"             "$oms_prj/${output}"
             "snowsoil.outputInterval"         3600.0
             "snowsoil.outputStandardTime"     -9.0
         }

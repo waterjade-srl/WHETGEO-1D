@@ -31,6 +31,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -715,6 +716,12 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Bare-soil surface fluxes of the step at its final top temperature, with the Energy Balance top and no snow; null otherwise.")
 	@Out
 	public SurfaceFluxes outBareSoilFluxes;
+	@Description("Net radiation of the bare soil in the step, SWnet + LWnet [W m-2], keyed by stationID as the GEOframe series, for GEOET's soil evaporation (through a feedback: the value of the previous step); -9999 with snow on the ground or without the Energy Balance top.")
+	@Out
+	public HashMap<Integer, double[]> outBareSoilNetRadiation;
+	@Description("Heat flux into the soil at its surface in the step [W m-2, positive downwards], keyed by stationID, for GEOET (the G of Penman-Monteith); -9999 with snow on the ground.")
+	@Out
+	public HashMap<Integer, double[]> outSoilHeatFlux;
 	@Out
 	public RunHeader outRunHeader;
 	@Out
@@ -771,6 +778,12 @@ public class SnowSoilSolver1DMain extends HMModel {
 			skin = imposed.temperature();
 		}
 		outBareSoilFluxes = bareSoil;
+		// the GEOframe series for GEOET: bare soil only, missing under snow (no soil evaporation there, LINK-2)
+		boolean bare = result.snow().isEmpty() && result.surface() == null;
+		outBareSoilNetRadiation = new HashMap<>(Map.of(stationID,
+				new double[] { bareSoil == null ? NODATA : bareSoil.netShortwave() + bareSoil.netLongwave() }));
+		outSoilHeatFlux = new HashMap<>(Map.of(stationID,
+				new double[] { bare ? result.heat().surfaceFlux() : NODATA }));
 		if (Double.isNaN(result.surfaceTemperature()) && !Double.isNaN(skin)) {
 			outSurfaceTemperature = skin;
 		}

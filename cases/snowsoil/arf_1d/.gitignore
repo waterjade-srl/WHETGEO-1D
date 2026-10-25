@@ -4,3 +4,7 @@ geotop/meteo0001.txt
 .flag.log
 data/
 output/
+output_geoet/
+output_noevap/
+.geoet.log
+.noevap.log

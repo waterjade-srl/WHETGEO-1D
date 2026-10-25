@@ -7,7 +7,7 @@ regression runs one snow season of it, 1 September 2001 - 15 June 2002 (the snow
 the porting against its own earlier outputs (VAL-4), neither a validation nor a fidelity reference.
 
 This writes, from <geotop>/tests/1D/ARF_1D:
-- geotop/meteo0001.txt.gz: the records of the meteo file from 15/08/2001 to 05/07/2002 (local standard time, UTC-9);
+- geotop/meteo0001.txt.gz: the records of the meteo file from 15/08/2001 to 05/09/2002 (local standard time, UTC-9), the summer for the GEOET run;
 - geotop/horizon0001.txt: a flat horizon (the test has none);
 - grid/: the 50 layers of soil/SoilARF0001.txt as WHETGEO-1D CSV inputs, one parameter set per layer, initial
   T = InitSoilTemp (-4.8 degC) and psi = 0 (InitSoilPressure) everywhere.
@@ -20,7 +20,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIRST = (2001, 8, 15)
-LAST = (2002, 7, 5)
+LAST = (2002, 9, 5)
 # GEOtop's default specific storativity, as WHETGEO's alpha_SS = S_s / (rho g); the file gives SS = 1e-7 mm-1
 ALPHA_SS = 1e-7 * 1000.0 / (1000.0 * 9.81)
 INIT_T = -4.8
