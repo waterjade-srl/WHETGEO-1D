@@ -14,6 +14,8 @@ OMS_JAR=${OMS_JAR:-$HOME/.m2/repository/edu/colostate/omslab/oms/3.5.12/oms-3.5.
 CASES=${*:-NTGS1_ERA5 NTGS1_JR3QG NTGS2_ERA5 NTGS2_JR3QG}
 
 cd "$REPO"
+# oms3.CLI leaves an empty workspace, <sim name>/out, in the current folder
+trap 'find . -maxdepth 2 -path "./snowsoil_*" -type d -empty -delete' EXIT
 mvn -q -o compile dependency:build-classpath -Dmdep.outputFile="$CASE/.cp.txt"
 CP="target/classes:$(cat "$CASE/.cp.txt")"
 mkdir -p "$CASE/output"

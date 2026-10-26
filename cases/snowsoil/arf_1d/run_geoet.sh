@@ -20,7 +20,8 @@ HMACHINE=${HMACHINE:-$HOME/.m2/repository/org/hortonmachine/hm-hmachine/0.11.2/h
 CP="$REPO/target/classes:$(cat "$CASE/.cp.txt")"
 
 BUILD=$(mktemp -d "${TMPDIR:-/tmp}/geoet.XXXXXX")
-trap 'rm -rf "$BUILD"' EXIT
+# oms3.CLI leaves an empty workspace, <sim name>/out, in the current folder
+trap 'rm -rf "$BUILD"; find . -maxdepth 2 -path "./snowsoil_*" -type d -empty -delete' EXIT
 cp -r "$GEOET_SRC/src/main/java" "$BUILD/src"
 sed -i -e 's/import org\.opengis\.feature\.simple\.SimpleFeature;/import org.geotools.api.feature.simple.SimpleFeature;/' \
        -e 's/import org\.opengis\.referencing\.crs\.CoordinateReferenceSystem;/import org.geotools.api.referencing.crs.CoordinateReferenceSystem;/' \
