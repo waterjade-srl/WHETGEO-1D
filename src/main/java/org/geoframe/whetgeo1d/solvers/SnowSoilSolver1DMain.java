@@ -206,11 +206,12 @@ import oms3.annotations.Unit;
  * <b>Terrain.</b> {@code skyViewFactor} V scales the estimated diffuse
  * shortwave and sky longwave, and the surface emission to the sky; (1 - V) of
  * the shortwave the surface reflected in the previous step comes back as
- * diffuse, as GEOtop with {@code Surroundings = 0}. A slope and a horizon are
- * not computed here: the beam on the slope, the diffuse and the cosine come
- * as inputs ({@code inShortwaveDirect}, {@code inShortwaveDiffuse},
- * {@code inCosIncidence}), e.g. from the fidelity package's
- * {@code GeotopForcingFiles} (cases/snowsoil/friuli/run_topography.sh).
+ * diffuse, as GEOtop with {@code Surroundings = 0}. {@code slope} counts the
+ * precipitation per unit area of the slope and reduces the overburden of the
+ * compaction. The beam on the slope, the diffuse and the cosine are not
+ * computed here: they come as inputs ({@code inShortwaveDirect},
+ * {@code inShortwaveDiffuse}, {@code inCosIncidence}) from
+ * {@link TerrainShortwaveMain} (cases/snowsoil/friuli/run_terrain.sh).
  *
  * <p>
  * Not here: evapotranspiration sinks from GEOET, an initial snowpack.
@@ -368,6 +369,11 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	@Unit("m")
 	public double elevation = 0.0;
+
+	@Description("Slope of the column: the precipitation inputs, per unit horizontal area, are counted per unit area of the slope (P cos slope, GEOtop with ActualOrProjectedArea = 1), and the overburden of the compaction is reduced by cos slope; 0: the configuration's (flat).")
+	@In
+	@Unit("deg")
+	public double slope = 0.0;
 
 	@Description("Sky view factor V of the column, in (0, 1]: the estimated diffuse shortwave and sky longwave are V times the open-sky ones, the surface emits to the sky V of its longwave, and (1 - V) of the shortwave it reflected in the previous step comes back from the terrain as diffuse, as GEOtop with Surroundings = 0.")
 	@In
@@ -996,6 +1002,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 					c.maxIceVolumeFraction(), c.dryDeformationRate(), c.densityCutoff(), c.wetDeformationRate(),
 					c.viscosity(), c.minimumIceMass(), geotopCap), processes.equationOfState()));
 		}
+		if (slope != 0.0) {
+			processes = processes.withSlopeAngle(Math.toRadians(slope));
+		}
 		if (skinNode != null && !skinNode.isBlank()) {
 			processes = processes.withSkin(EnumUtils.fromString(SkinNode.class, skinNode.trim()));
 		}
@@ -1073,6 +1082,13 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("longitude", Double.toString(longitude));
 		attributes.put("standardTime", Double.toString(standardTime));
 		attributes.put("elevation", Double.toString(elevation));
+		// terrain only when there is one: flat runs keep their header and restart label
+		if (slope != 0.0) {
+			attributes.put("slope", Double.toString(slope));
+		}
+		if (skyViewFactor != 1.0) {
+			attributes.put("skyViewFactor", Double.toString(skyViewFactor));
+		}
 		attributes.put("clearSkyEmissivity", emissivity.name());
 		attributes.put("precipitationPartition", partition.toString());
 		attributes.put("timeStep", Double.toString(tTimeStep));
@@ -1424,8 +1440,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 			rain = split.rain();
 			snow = split.snow();
 		}
-		rain = Math.max(0.0, rain);
-		snow = Math.max(0.0, snow);
+		// per unit area of the slope
+		double projection = Math.cos(Math.toRadians(slope));
+		rain = Math.max(0.0, rain) * projection;
+		snow = Math.max(0.0, snow) * projection;
 		outRainfall = rain;
 		outSnowfall = snow;
 		double precipitationTemperature = value(inPrecipitationTemperature);

@@ -402,6 +402,32 @@ public class SnowSoilSolver1DMainTest {
 		assertTrue("daily " + daily, daily > 14e6 && daily < 22e6);
 	}
 
+	/**
+	 * Terrain of the column: precipitation per unit area of the slope,
+	 * P cos β; the estimated sky longwave and diffuse times V.
+	 */
+	@Test
+	public void slopeAndSkyViewFactor() throws Exception {
+		SnowSoilSolver1DMain open = cloudyComponent(0.7);
+		SnowSoilSolver1DMain terrain = cloudyComponent(0.7);
+		open.inAirTemperature = constant(-5.0);
+		terrain.inAirTemperature = constant(-5.0);
+		open.inPrecipitation = constant(2.0);
+		terrain.inPrecipitation = constant(2.0);
+		terrain.slope = 30.0;
+		terrain.skyViewFactor = 0.8;
+		// first step: nothing reflected yet, so the diffuse is V times the open one
+		open.inCurrentDate = "2026-03-01 12:00";
+		terrain.inCurrentDate = "2026-03-01 12:00";
+		open.solve();
+		terrain.solve();
+		assertEquals(2.0 * Math.cos(Math.toRadians(30.0)), terrain.outSnowfall, 1e-12);
+		assertEquals(0.8 * open.outLongwaveIn, terrain.outLongwaveIn, 1e-9);
+		assertTrue(terrain.outShortwaveGlobal < open.outShortwaveGlobal);
+		open.close();
+		terrain.close();
+	}
+
 	private static SnowSoilSolver1DMain cloudyComponent(double tau) {
 		SnowSoilSolver1DMain c = caseComponent("recommended", "Fixed", new RecordingWriter());
 		c.inputFiles = "";

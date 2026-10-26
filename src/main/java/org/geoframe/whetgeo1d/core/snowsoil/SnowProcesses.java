@@ -199,6 +199,13 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 				node, shortwavePenetration);
 	}
 
+	/** Same processes on a terrain slope [rad] (the overburden of the compaction). */
+	public SnowProcesses withSlopeAngle(double angle) {
+		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,
+				angle, percolation, sublimationThickness, restratification, precipitation, surfaceCoupling, thinSnow,
+				skin, shortwavePenetration);
+	}
+
 	/** Same processes with another shortwave penetration (SNOW-7; {@link ShortwavePenetration#NONE} for sensitivity runs). */
 	public SnowProcesses withShortwavePenetration(ShortwavePenetration penetration) {
 		return new SnowProcesses(equationOfState, surfaceBalance, turbulence, albedo, restoringSnowfall, compaction,

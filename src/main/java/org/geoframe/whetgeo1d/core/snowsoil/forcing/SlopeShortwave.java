@@ -16,17 +16,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.geoframe.whetgeo1d.core.snowsoil.fidelity;
+package org.geoframe.whetgeo1d.core.snowsoil.forcing;
 
 import java.util.Objects;
 import java.util.function.DoubleUnaryOperator;
 
-import org.geoframe.whetgeo1d.core.snowsoil.forcing.ClearSkyTransmissivity;
-import org.geoframe.whetgeo1d.core.snowsoil.forcing.CloudTransmissivity;
-import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 
 /**
- * <b>Temporary: to be evaluated for the GEOframe components.</b> Shortwave on
+ * Shortwave on
  * a slope as GEOtop 3.0 computes it for a point ({@code energy.balance.cc:488-524},
  * {@code shortwave_radiation}, {@code radiation.cc:320-375}), from the cloud
  * transmissivity τ<sub>c</sub> of the step:
@@ -117,7 +114,7 @@ public record SlopeShortwave(SolarGeometry site, ClearSkyTransmissivity clearSky
 	}
 
 	/** max(0, cos β sin α + sin β cos α cos(ψ - ψ_s)), 0 with the sun down ({@code Cosinc}). */
-	double cosIncidence(double day, SolarGeometry.Sun sun) {
+	public double cosIncidence(double day, SolarGeometry.Sun sun) {
 		double h = site.height(day, sun);
 		if (!(h > 0.0)) {
 			return 0.0;
@@ -127,7 +124,7 @@ public record SlopeShortwave(SolarGeometry site, ClearSkyTransmissivity clearSky
 	}
 
 	/** Solar azimuth from north clockwise [rad], GEOtop's {@code SolarAzimuth} ({@code radiation.cc:98-146}). */
-	double azimuth(double day, SolarGeometry.Sun sun) {
+	public double azimuth(double day, SolarGeometry.Sun sun) {
 		double h = (day - Math.floor(day)) * 24.0 + site.hourShift(sun);
 		if (h >= 24.0) {
 			h -= 24.0;

@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Objects;
 
+import org.geoframe.whetgeo1d.core.snowsoil.forcing.Horizon;
+import org.geoframe.whetgeo1d.core.snowsoil.forcing.SlopeShortwave;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.ClearSkyTransmissivity;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.CloudTransmissivity;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.DailyCloudiness;
