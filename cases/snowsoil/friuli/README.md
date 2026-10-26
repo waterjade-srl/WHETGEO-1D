@@ -176,6 +176,31 @@ What the table shows (RMSE of the daily snow depth; GEOtop 3.0 moves the same wa
 How the geometry of a station should be described is a choice for the plan of operational runs: the flat
 field with or without its horizon, or the cell of the DEM.
 
+## As an operational run
+
+`snowsoil_friuli_terrain.sim` (with `run_terrain.sh`) runs the same stations from GEOframe inputs only, with no
+GEOtop file. `TerrainShortwaveMain` computes the shortwave on the terrain upstream of the column, from:
+
+- the station shapefile `data/stations.shp`: id, elevation, latitude and longitude, and the slope, aspect and
+  sky view factor (`svf`) of the map cell;
+- the horizon table `data/horizon.csv`;
+- the cloud transmissivity.
+
+`make_stations.py` writes both files from the source run. `-Dgeometry` chooses the description of the station:
+
+| Geometry | Slope and aspect | Horizon | V |
+|---|---|---|---|
+| `flat` | 0 | flat | 1 |
+| `field` (default) | 0 | of the point | 1 |
+| `cell` | of the map cell | of the point | of the map cell |
+
+`field` is a stake on a flat field under its horizon.
+
+**Check.** Given the same pressure, the shortwave of `flat`, `field` and `cell` is the same as `run_topography.sh`
+gives for `flat`, `shade` and `topography`, to the printed digits. The runs use the measured pressure, and in
+`cell` the compaction on the slope, so the snow depth differs from those runs by at most 13 mm in an hour;
+RMSE within 0.005 m, the same melt-out days.
+
 ## To run your own station
 
 1. **Write the forcing** as OMS CSV, like the files in `data/`, one column per station ID, UTC.

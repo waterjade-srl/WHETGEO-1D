@@ -189,22 +189,23 @@ The column runs in a `.sim` next to GEOframe components; what has been tried so 
   - The column gives GEOET the net radiation and the heat flux into the soil of the bare soil, through a `feedback` connection (the previous step): `outBareSoilNetRadiation`, `outSoilHeatFlux`, GEOframe series keyed by `stationID`, −9999 under snow.
   - GEOET has to be compiled against this project's GeoTools 34; `run_geoet.sh` does it with three renamed imports.
   - GEOET is hourly only: its Penman–Monteith coefficient is right only for steps of exactly 3600 s.
-- **ShortWaveRadiationBalance, the shortwave on slopes (LINK-4): not linked yet.** The point case of GEOframe's component runs on the Friuli DEM once ported to the current hortonmachine:
-  - imports from jgrasstools, JTS, JAI and GeoTools updated;
-  - two calls changed;
-  - a `TOWGS84` added to the `.prj` of the inputs.
+- **Shortwave on the terrain of a station (LINK-1, LINK-4): `TerrainShortwaveMain`**, in this project, upstream of the column. Example: `friuli/snowsoil_friuli_terrain.sim` and `run_terrain.sh`.
+  - Inputs, GEOframe only: station shapefile (`OmsShapefileFeatureReader`: id, slope, aspect, sky view factor, and optionally latitude, longitude, elevation), horizon table (`azimuth` and one `value_<id>` column per station, NivoGEO-1D's format), air temperature, humidity, pressure, and the cloud transmissivity or the measured global shortwave on the horizontal.
+  - What it computes, as GEOtop 3.0 for a point: Iqbal's clear sky times τ_c, split with Erbs; the beam on the slope with the longitude in the solar hour, zero in the shadow of the horizon; the diffuse times V; the cosine of the snow albedo. It gives `outShortwaveDirect`, `outShortwaveDiffuse`, `outCosIncidence` and `outCloudTransmissivity` to the column's inputs of the same name.
+  - With a measured global shortwave and the sun too low for a τ_c, the measurement goes to the diffuse. GEOtop instead takes the clear sky times its daily τ_c there, so the season's diffuse differs by about 3 % on Matsch_P2_Ref_007; the beam is the same.
+  - The column's `slope` and `skyViewFactor` must be the station's: the precipitation per unit area of the slope (P cos β), the compaction on the slope, the emission to the sky and the reflection from the terrain.
+  - A field name left empty takes the component's scalar parameter: `slope` 0 and `skyViewFactor` 1 describe a stake on a flat field under its horizon.
+- **ShortWaveRadiationBalance of GEOframe: not linked.** The point case runs on the Friuli DEM once ported to the current hortonmachine (imports, two calls, a `TOWGS84` in the `.prj`). It lacks what `TerrainShortwaveMain` does:
+  - a cloud transmissivity on a slope (it gives only the clear sky);
+  - the longitude in the hour angle;
+  - the cosine of incidence.
 
-  Three gaps remain before its outputs can go to `inShortwaveDirect`, `inShortwaveDiffuse` and `inCosIncidence`:
-  - it gives only the **clear-sky** shortwave. For a station that measures it, the measured global shortwave is split by GEOframe's decomposition models; for a station without it, as in Friuli, no GEOframe component applies a cloud transmissivity on a slope;
-  - it takes the hour angle from the **UTC hour without the longitude**, so it needs the dates in solar time, 51 minutes later in Friuli;
-  - it does not output the cosine of the incidence of the beam, which the snow albedo uses.
-
-  Until then, the column runs on flat ground; the temporary fidelity tools (`core/snowsoil/fidelity`, `SlopeShortwave`) give the shortwave on a slope as GEOtop computes it.
+  Bringing these into it is the proposal for GEOframe (LINK-1).
 
 ## Cases
 
 - `synthetic_season/`: the synthetic season of the example above.
-- `friuli/`: the example from station data, explained in its `README.md`. Four stations of the Friuli Venezia Giulia network, 1 November 2025 – 1 May 2026, recommended configuration, heat only, against the observed snow depth (VAL-3). `make_inputs.py` writes the forcing from the SMET files of the MobyGIS-GEOtop run, `run_all.sh` runs the four stations (`-Dstation=n` in the `.sim`), `friuli_comparison.ipynb` compares with the observations, GEOtop 3.0 and MobyGIS (`compare.py`).
+- `friuli/`: the example from station data, explained in its `README.md`. Four stations of the Friuli Venezia Giulia network, 1 November 2025 – 1 May 2026, recommended configuration, heat only, against the observed snow depth (VAL-3). `make_inputs.py` writes the forcing from the SMET files of the MobyGIS-GEOtop run, `run_all.sh` runs the four stations (`-Dstation=n` in the `.sim`), `friuli_comparison.ipynb` compares with the observations, GEOtop 3.0 and MobyGIS (`compare.py`). On the terrain of the stations: `run_terrain.sh` (operational, GEOframe inputs) and `run_topography.sh` (GEOtop 3.0's forcing, for the attribution of each terrain term, `compare.py --terrain`).
 - `matsch_p2_ref_007/`: GEOtop 3.0's official 1D test, fidelity against GEOtop with the approved VAL-1 tolerances; notebook `Jupyter_Notebook/6_Matsch_P2_Ref_007_Fidelity.ipynb`.
 - `canada_ntgs/`: the NTGS1/NTGS2 boreholes, ERA5 and JRA-3Q, fidelity, heat only, against GEOtop 3.0; notebook `Jupyter_Notebook/7_Canada_NTGS_Fidelity.ipynb`.
 - `arf_1d/`: one season of GEOtop's ARF_1D, the snow regression of `tools/snow_regression.sh`, and the run with GEOET's soil evaporation (`run_geoet.sh`).

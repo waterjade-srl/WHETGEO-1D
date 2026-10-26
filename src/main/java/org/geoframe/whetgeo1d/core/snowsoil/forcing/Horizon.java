@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.geoframe.whetgeo1d.core.snowsoil.fidelity;
+package org.geoframe.whetgeo1d.core.snowsoil.forcing;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * <b>Temporary: to be evaluated for the GEOframe components.</b> A GEOtop
+ * A GEOtop
  * horizon file (azimuth from north clockwise and horizon height, degrees) and
  * GEOtop's shadow test on it ({@code shadows_point},
  * {@code radiation.cc:757-826}): the horizon height at the solar azimuth is
@@ -70,6 +70,47 @@ public record Horizon(double[] azimuth, double[] height) {
 			String[] p = l.split(",");
 			rows.add(new double[] { Double.parseDouble(p[0].trim()), Double.parseDouble(p[1].trim()) });
 		}
+		double[] a = new double[rows.size()];
+		double[] h = new double[rows.size()];
+		for (int i = 0; i < a.length; i++) {
+			a[i] = rows.get(i)[0];
+			h[i] = rows.get(i)[1];
+		}
+		return new Horizon(a, h);
+	}
+
+	/**
+	 * Reads the horizon of one station from a GEOframe OMS table with a column
+	 * {@code azimuth} and one column {@code value_<id>} per station, as
+	 * NivoGEO-1D's {@code HorizonReader}: lines starting with a comma are data,
+	 * the {@code @H} line names the columns, the rest is header.
+	 *
+	 * @param file the table
+	 * @param id   the station
+	 */
+	public static Horizon readTable(Path file, int id) throws IOException {
+		List<String> names = null;
+		List<double[]> rows = new ArrayList<>();
+		for (String line : Files.readAllLines(file)) {
+			String[] p = line.split(",", -1);
+			if (p[0].trim().equals("@H")) {
+				names = new ArrayList<>();
+				for (int i = 1; i < p.length; i++) {
+					names.add(p[i].trim());
+				}
+			} else if (line.startsWith(",") && names != null) {
+				int a = names.indexOf("azimuth");
+				int h = names.indexOf("value_" + id);
+				if (a < 0 || h < 0) {
+					throw new IOException(file + ": no columns azimuth and value_" + id);
+				}
+				rows.add(new double[] { Double.parseDouble(p[a + 1].trim()), Double.parseDouble(p[h + 1].trim()) });
+			}
+		}
+		if (rows.isEmpty()) {
+			throw new IOException(file + ": no horizon lines");
+		}
+		rows.sort((x, y) -> Double.compare(x[0], y[0]));
 		double[] a = new double[rows.size()];
 		double[] h = new double[rows.size()];
 		for (int i = 0; i < a.length; i++) {
