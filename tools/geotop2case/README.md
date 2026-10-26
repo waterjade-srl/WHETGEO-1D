@@ -1,0 +1,62 @@
+# geotop2case
+
+Writes the case GeoPackage of 1D runs (read by `CaseGeoPackage`, `SnowSoilSolver1DMain -caseFile` and `TerrainShortwaveMain -caseFile`) from GEOtop 3.0 point runs (`PointSim = 1`). Optionally it also writes their meteorological time series as GEOframe OMS tables.
+
+```bash
+python3 tools/geotop2case/geotop2case.py case.gpkg RUN [RUN ...] --epsg CODE \
+    [--names A,B,...] [--site-type station] [--directions 16] [--case TEXT] [--series data/]
+```
+
+Every point of every run becomes a point and a column of the case, numbered from 1 in the order given. Identical soil profiles and initial conditions are written once. Requires `geopandas`, `pyproj` and `numpy`.
+
+## What it reads
+
+It reads what GEOtop 3.0 reads, with GEOtop's precedence and defaults:
+
+- **Points:**
+  1. the `Point*` keywords;
+  2. then the `PointFile`;
+  3. then the elevation, slope, aspect and sky view factor maps;
+  4. then GEOtop's defaults.
+- **Horizon:** `HorizonPointFile` of each point. Without a file the horizon is flat.
+- **Soil:** `SoilParFile` over the soil keywords, cell by cell.
+- **Initial condition:** the water table at `InitWaterTableDepth`, hydrostatic with GEOtop's cos(slope), or the initial pressure of every layer; then `InitSoilTemp` or the temperature column.
+- **Sensor heights:** wind and temperature, from the meteo station keywords.
+
+## What it writes
+
+- **`points`:**
+  - `svf` is computed from the horizon, resampled to `--directions` directions, and the slope (Dozier and Frew 1990): this is the one the column uses.
+  - `svf_geotop` is the one of the GEOtop run, kept for traceability.
+- **Soil:** one control volume per GEOtop layer, in SI units.
+- **`columns`** and **`provenance`**, with the SHA-256 of every file read.
+- **Time series (`--series`):** in UTC.
+  - Precipitation is the intensity times the interval to the previous record.
+  - The files are read from `meteo0001.txt.old` when a GEOtop run left one, because GEOtop rewrites the file it read without some of its columns.
+
+The script docstring gives the full mapping and the units.
+
+## Not supported
+
+The script stops on:
+
+- more than one soil type;
+- a bedrock above the bottom of the soil;
+- slope, aspect or sky view factor derived from a DEM without their own map;
+- a smoothed DEM;
+- more than one meteo station;
+- meteo dates given as Julian days only.
+
+## Checks
+
+- **Tests:** `python3 -m pytest tools/geotop2case`, on a synthetic run.
+- **The 13 GEOtop 3.0 1D tests:**
+  - all of them convert;
+  - points, soil matrix and initial pressure equal those resolved by an independent Python port of GEOtop's input code, to the last digit (GEOtop parses numbers with its own routine).
+- **Friuli** (`friuli/data/friuli.gpkg`, from the GEOtop runs of the four stations):
+  - the horizon, soil layers, soil parameters and time series are identical to those of `make_case.py` and `make_inputs.py`;
+  - the coordinates are those of the GEOtop runs (SMET), within 1 m of the station list;
+  - the initial condition has GEOtop's cos(slope).
+- **Matsch, ARF_1D and the Canadian boreholes:**
+  - the soil and initial condition equal the hand-written `grid/` inputs of their cases, to the digits printed there;
+  - for the Canadian boreholes, Ks is GEOtop's default 1e-4 mm/s, where `grid/` has an arbitrary value (the water balance is off there).
