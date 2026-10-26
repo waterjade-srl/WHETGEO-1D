@@ -1,46 +1,32 @@
 /*
  * Friuli case as an operational run: the same column, configuration and soil
- * as snowsoil_friuli.sim, with the shortwave on the terrain of the station
- * computed upstream by TerrainShortwaveMain from GEOframe inputs only: the
- * station shapefile (data/stations.shp: slope, aspect, svf of the 250 m map
- * cell), the horizon table (data/horizon.csv) and the cloud transmissivity.
- * No GEOtop file is read.
+ * as snowsoil_friuli.sim, from GEOframe inputs only. The static inputs are one
+ * GeoPackage, data/friuli.gpkg (make_case.py): points with their slope,
+ * aspect, sky view factor and sensor heights, a 16-direction horizon per
+ * point, the soil profile and the initial condition, and a row per column.
+ * The time series are the OMS tables of data/. TerrainShortwaveMain computes
+ * the shortwave on the terrain upstream of the column. No GEOtop file is read.
  *
+ * -Dcolumn=1..4 picks the row of the columns table (here, one per station).
  * -Dgeometry chooses how the station is described (DN-15, VAL-3):
- *   flat   no slope, no horizon, V = 1: as snowsoil_friuli.sim;
- *   field  a stake on a flat field: its horizon, no slope, V = 1 (default);
- *   cell   the map cell: slope, aspect and V of the cell, and the horizon.
- * -Dstation=1..4. Outputs in output/terrain/<geometry>/station_<n>/.
- *
- * The column's slope and skyViewFactor must be the station's (the precipitation
- * per unit area of the slope, the emission to the sky and the reflection from
- * the terrain); they are written below per station, as in data/stations.shp.
+ *   cell   the point: slope, aspect, horizon, and V computed from them (default);
+ *   flat   no slope, no horizon, V = 1, as snowsoil_friuli.sim, and
+ *   field  its horizon, no slope, V = 1: internal checks only.
+ * Outputs in output/terrain/<geometry>/station_<n>/.
  * Run with run_terrain.sh, from the root of the repository.
  */
 import oms3.SimBuilder as OMS3
 
-def station = (System.getProperty("station") ?: "1") as int
-def geometry = System.getProperty("geometry") ?: "field"
-def cell = (geometry == "cell")
-// latitude, longitude, elevation of the stations (one line each: the OMS preprocessor reads def lines one by one)
-def latitude  = [1: 46.4518, 2: 46.46722, 3: 46.4662, 4: 46.48414][station]
-def longitude = [1: 12.62653, 2: 12.68198, 3: 12.71044, 4: 12.72301][station]
-def elevation = [1: 1710.0, 2: 1414.0, 3: 1200.0, 4: 1742.0][station]
-// slope and sky view factor of the map cell (data/stations.shp), for the column; field and flat: 0 and 1
-def slope = cell ? [1: 20.0, 2: 0.0, 3: 11.0, 4: 12.0][station] : 0.0
-def skyView = cell ? [1: 0.78, 2: 0.83, 3: 0.78, 4: 0.87][station] : 1.0
-// the station fields of TerrainShortwaveMain: empty means the parameter (slope 0, aspect 0, V = 1)
-def fSlope = cell ? "slope" : ""
-def fAspect = cell ? "aspect" : ""
-def fSky = cell ? "svf" : ""
-def horizon = geometry == "flat" ? "" : "$oms_prj/data/horizon.csv"
+def column = (System.getProperty("column") ?: "1") as int
+def geometry = System.getProperty("geometry") ?: "cell"
 
 def startDate = "2025-11-01 01:00"
 def endDate   = "2026-05-01 00:00"
 def timestep  = 60
 def data = "$oms_prj/data"
+def gpkg = "$oms_prj/data/friuli.gpkg"
 
-new OMS3().sim(name: "snowsoil_friuli_${geometry}_${station}") {
+new OMS3().sim(name: "snowsoil_friuli_${geometry}_${column}") {
 
     model(while: "reader_airT.doProcess") {
 
@@ -51,7 +37,6 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${station}") {
             "reader_p"     "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
             "reader_prec"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
             "reader_tau"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
-            "stations"     "org.hortonmachine.gears.io.shapefile.OmsShapefileFeatureReader"
             "terrain"      "org.geoframe.whetgeo1d.solvers.TerrainShortwaveMain"
             "snowsoil"     "org.geoframe.whetgeo1d.solvers.SnowSoilSolver1DMain"
         }
@@ -100,39 +85,25 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${station}") {
             "reader_tau.fileNovalue"   "-9999.0"
 
             // station geometry and shortwave on the terrain
-            "stations.file"                   "$oms_prj/data/stations.shp"
-            "terrain.fStationsid"             "id"
-            "terrain.fStationsSlope"          fSlope
-            "terrain.fStationsAspect"         fAspect
-            "terrain.fStationsSkyViewFactor"  fSky
-            "terrain.fStationsLatitude"       "lat"
-            "terrain.fStationsLongitude"      "lon"
-            "terrain.fStationsElevation"      "elevation"
-            "terrain.horizonFile"             horizon
+            "terrain.caseFile"                gpkg
+            "terrain.siteGeometry"            geometry
             "terrain.standardTime"            0.0
             "terrain.tTimeStep"               3600.0
 
             // configuration (ARCH-6): the plan runs Friuli in the recommended configuration
             "snowsoil.configuration"          "recommended"
             "snowsoil.soilWaterMode"          "Fixed"
-            "snowsoil.windHeight"             5.0
-            "snowsoil.temperatureHeight"      2.0
 
-            // site
-            "snowsoil.stationID"              station
-            "snowsoil.latitude"               latitude
-            "snowsoil.longitude"              longitude
+            // site, sensors, terrain and soil from the case: column n of data/friuli.gpkg
+            "snowsoil.caseFile"               gpkg
+            "snowsoil.caseColumn"             column
+            "snowsoil.siteGeometry"           geometry
             "snowsoil.standardTime"           0.0
-            "snowsoil.elevation"              elevation
-            "snowsoil.slope"                  slope
-            "snowsoil.skyViewFactor"          skyView
             "snowsoil.tTimeStep"              3600.0
 
             // longwave as LWinParameterization = 7 of the GEOtop runs
             "snowsoil.clearSkyEmissivity"     "Konzelmann 1994"
 
-            // soil grid: GEOtop's three layers, WHETGEO-1D CSV inputs
-            "snowsoil.soilGridFile"           "$oms_prj/grid"
 
             // boundary conditions (COL-6): bare soil by bulk transfer, no flux at the bottom
             "snowsoil.bareSoilTopType"        "Bulk Transfer"
@@ -145,8 +116,8 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${station}") {
             "snowsoil.snowThreshold"          0.5
 
             // run header and outputs
-            "snowsoil.inputFiles"             "${data}/airTemperature.csv,${data}/relativeHumidity.csv,${data}/windSpeed.csv,${data}/pressure.csv,${data}/precipitation.csv,${data}/cloudTransmissivity.csv,${data}/stations.shp,${data}/horizon.csv"
-            "snowsoil.outputPath"             "$oms_prj/output/terrain/${geometry}/station_${station}"
+            "snowsoil.inputFiles"             "${data}/airTemperature.csv,${data}/relativeHumidity.csv,${data}/windSpeed.csv,${data}/pressure.csv,${data}/precipitation.csv,${data}/cloudTransmissivity.csv,"
+            "snowsoil.outputPath"             "$oms_prj/output/terrain/${geometry}/station_${column}"
         }
 
         connect {
@@ -155,7 +126,6 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${station}") {
             "reader_wind.outData"   "snowsoil.inWindSpeed"
             "reader_p.outData"      "snowsoil.inPressure"
             "reader_prec.outData"   "snowsoil.inPrecipitation"
-            "stations.geodata"      "terrain.inStations"
             "reader_airT.outData"   "terrain.inAirTemperature"
             "reader_rh.outData"     "terrain.inRelativeHumidity"
             "reader_p.outData"      "terrain.inPressure"
