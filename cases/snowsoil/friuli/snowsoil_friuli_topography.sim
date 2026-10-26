@@ -20,7 +20,7 @@ def latitude  = [1: 46.4518, 2: 46.46722, 3: 46.4662, 4: 46.48414][station]
 def longitude = [1: 12.62653, 2: 12.68198, 3: 12.71044, 4: 12.72301][station]
 def elevation = [1: 1710.0, 2: 1414.0, 3: 1200.0, 4: 1742.0][station]
 // sky view factor from the point horizon (data/geometry.csv): on the slope in topography, flat in horizon
-def skyView = variant == "topography" ? [1: 0.8467, 2: 0.9603, 3: 0.9056, 4: 0.9787][station] : variant == "horizon" ? [1: 0.9316, 2: 0.9603, 3: 0.9458, 4: 0.9923][station] : 1.0
+def skyView = variant == "topography" ? [1: 0.9418, 2: 0.9649, 3: 0.9515, 4: 0.9764][station] : variant == "horizon" ? [1: 0.9350, 2: 0.9649, 3: 0.9495, 4: 0.9753][station] : 1.0
 
 def startDate = "2025-11-01 01:00"
 def endDate   = "2026-05-01 00:00"

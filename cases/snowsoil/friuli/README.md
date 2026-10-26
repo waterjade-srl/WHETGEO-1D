@@ -152,8 +152,13 @@ from them.
 - GDAL and QGIS read the file as a standard GeoPackage. GEOframe's `OmsVectorReader` reads the layer of points
   (`friuli.gpkg#points`) but not the attribute tables, which the components read with SQL.
 
-**The map's sky view factor is not used.** The 250 m map gives V = 0.78–0.87 at the stations. The point
-horizons of the same source give 0.85–0.98 (Dozier and Frew 1990, on the slope).
+**The horizons, `data/horizon/`,** come from a 3" DEM (about 90 m) covering Friuli: 72 directions, a sample
+every 90 m up to 20 km, with the curvature of the Earth and refraction, the observer 2 m above the DEM at the
+point. The horizon files of the MobyGIS source are not used: north and south are swapped in them, and they come
+from the case's 250 m DEM, which ends 0.4 km north of Casera Pieltinis.
+
+**The map's sky view factor is not used.** The 250 m map gives V = 0.78–0.87 at the stations. The horizons
+give 0.94–0.98 (Dozier and Frew 1990, on the slope).
 
 `-Dgeometry=flat` and `-Dgeometry=field` (a flat field under its horizon) are for internal checks only.
 
@@ -161,16 +166,16 @@ Daily snow depth against the stake, operational run (`cell`):
 
 | Station | RMSE | Melt-out, run / measured | Flat column (`flat`) |
 |---|---|---|---|
-| Chiansaveit (20° NNE) | 0.23 m | 24/04 / 02/05 | 0.29 m |
-| Sauris di sopra (0°) | 0.11 m | 06/04 / 02/04 | 0.07 m |
-| Sauris di sotto (11° SSW) | 0.08 m | 13/03 / 27/03 | 0.04 m |
+| Chiansaveit (20° NNE) | 0.20 m | 26/04 / 02/05 | 0.29 m |
+| Sauris di sopra (0°) | 0.06 m | 04/04 / 02/04 | 0.07 m |
+| Sauris di sotto (11° SSW) | 0.10 m | 07/03 / 27/03 | 0.04 m |
 | Casera Pieltinis (12° SSE) | 0.20 m | 06/04 / 16/04 | 0.11 m |
 
 **Checks.**
 - `flat` from the GeoPackage gives, bit for bit, the data it gave from a shapefile and the CSV soil inputs.
 - Given the same pressure, the shortwave is the one that GEOtop 3.0's computation (`run_topography.sh`, below)
   gives for the same geometry.
-- 16 directions instead of the source's 72 move V by at most 0.005 and the snow depth RMSE by at most 0.012 m.
+- 16 directions instead of 72 move V by at most 0.003 and the snow depth RMSE by at most 0.004 m.
 
 ## What each terrain term does (internal test)
 
@@ -184,19 +189,18 @@ Daily snow depth against the stake, operational run (`cell`):
 
 | Station | flat | shade (horizon, V = 1) | horizon (with its V) | slope | topography | GEOtop 3.0 flat / topography |
 |---|---|---|---|---|---|---|
-| Chiansaveit | 0.29 m | 0.29 m | 0.32 m | 0.19 m | 0.23 m | 0.40 / 0.29 m |
-| Sauris di sopra | 0.07 m | 0.11 m | 0.11 m | 0.07 m | 0.11 m | 0.13 / 0.10 m |
-| Sauris di sotto | 0.04 m | 0.09 m | 0.08 m | 0.09 m | 0.07 m | 0.09 / 0.11 m |
+| Chiansaveit | 0.29 m | 0.28 m | 0.30 m | 0.19 m | 0.20 m | 0.40 / 0.27 m |
+| Sauris di sopra | 0.07 m | 0.07 m | 0.06 m | 0.07 m | 0.06 m | 0.13 / 0.13 m |
+| Sauris di sotto | 0.04 m | 0.04 m | 0.05 m | 0.09 m | 0.10 m | 0.09 / 0.13 m |
 | Casera Pieltinis | 0.11 m | 0.11 m | 0.11 m | 0.19 m | 0.20 m | 0.17 / 0.31 m |
 
 Every term moves the port and GEOtop 3.0 the same way:
 
-- **Slope of the map cell:** melt-out 8 days later on the NNE slope, 6–9 days earlier on the southern ones.
-- **Horizon:** keeps more snow at the two valley stations.
+- **Slope of the map cell:** melt-out 7–8 days later on the NNE slope, 4–10 days earlier on the southern ones.
+- **Horizon:** matters only at Chiansaveit, under a southern horizon of up to 25°.
 - **Sky view factor, once consistent with the horizon:** small, ±1–2 days of melt-out.
-- **On the mean of the four stations** the full terrain leaves GEOtop 3.0 where it was (0.195 → 0.201 m) and
-  moves the port from 0.126 to 0.152 m. That is because the port's flat column was already unbiased at the
-  valley stations.
+- **On the mean of the four stations** the full terrain moves GEOtop 3.0 from 0.195 to 0.210 m and the port
+  from 0.126 to 0.140 m. That is because the port's flat column was already unbiased at the valley stations.
 
 ## To run your own station
 
