@@ -7,9 +7,16 @@ Used by friuli_comparison.ipynb; also runnable as a script:
     python3 compare.py [geotop3_folder] [mobygis_output_tabs]
 
 geotop3_folder: the gt3/ folder written by converti.py and run.sh of the case folder
-(casi/Friuli/gt3, outside this repository), with piano/ and topografia/ inside; mobygis_output_tabs:
+(casi/Friuli/gt3, outside this repository), with piano/, orizzonte/, pendenza/ and topografia/ inside
+(flat, horizon and sky view factor only, slope and aspect only, all); mobygis_output_tabs:
 output_tabs/ of pysnow/tests/gt_sim1D. Missing folders are skipped. Environment variables
-FRIULI_GT3 and FRIULI_MOBYGIS do the same.
+FRIULI_GT3 and FRIULI_MOBYGIS do the same. The porting on the terrain of the stations
+(run_topography.sh) is read from output/topography/<variant>/station_<n>/run/.
+
+    python3 compare.py --terrain [geotop3_folder]
+
+prints instead the effect of each terrain term, the porting and GEOtop 3.0 side by side: snow depth
+RMSE and melt-out against the observation, peak SWE, and the seasonal means of SWnet and LWnet.
 """
 import os
 import sys
@@ -23,6 +30,9 @@ FOLDERS = {1: "1_Chiansaveit", 2: "2_Sauris_di_sopra", 3: "3_Sauris_di_sotto", 4
 DEFAULT_GT3 = os.path.expanduser("~/WORK/COMMESSE/2026_RigonianLab/work/geo2geo/casi/Friuli/gt3")
 DEFAULT_MOBYGIS = os.path.expanduser("~/git/geotop_moby/pysnow/tests/gt_sim1D/output_tabs")
 SNOW = 0.05  # snow on the ground: daily mean HS at least 5 cm [m]
+# terrain variants: name in the porting, name of the GEOtop 3.0 folder
+TERRAIN = {"flat": "piano", "horizon": "orizzonte", "shade": "ombra", "slope": "pendenza",
+           "topography": "topografia"}
 
 
 def read_oms(path):
@@ -41,9 +51,9 @@ def read_point(path):
     """GEOtop point file or the porting's point.csv: snow depth [m] by UTC date (end of step)."""
     df = pd.read_csv(path, comment="#")
     t = pd.to_datetime(df.iloc[:, 0], format="%d/%m/%Y %H:%M")
-    hs = df["snow_depth[mm]"].where(df["snow_depth[mm]"] != -9999.0) / 1000.0
-    swe = df["snow_water_equivalent[mm]"].where(df["snow_water_equivalent[mm]"] != -9999.0)
-    return pd.DataFrame({"HS": hs.values, "SWE": swe.values}, index=t)
+    df = df.where(df != -9999.0)
+    return pd.DataFrame({"HS": df["snow_depth[mm]"].values / 1000.0, "SWE": df["snow_water_equivalent[mm]"].values,
+                         "SWnet": df["SWnet[W/m2]"].values, "LWnet": df["LWnet[W/m2]"].values}, index=t)
 
 
 def load(gt3=None, mobygis=None):
@@ -65,6 +75,11 @@ def load(gt3=None, mobygis=None):
                 "GEOtop 3.0 topography": os.path.join(gt3, "topografia", FOLDERS[s], "output-tabs",
                                                       "point0001.txt"),
                 "MobyGIS": os.path.join(mobygis, "point%04d.txt" % s)}
+        for v, folder in TERRAIN.items():
+            runs["porting " + v] = os.path.join(HERE, "output", "topography", v, "station_%d" % s, "run",
+                                                "point.csv")
+            runs.setdefault("GEOtop 3.0 " + v, os.path.join(gt3, folder, FOLDERS[s], "output-tabs",
+                                                             "point0001.txt"))
         for name, path in runs.items():
             if os.path.exists(path):
                 p = read_point(path)
@@ -101,7 +116,41 @@ def metrics(hs):
     return pd.DataFrame(rows).set_index("run")
 
 
+def terrain(gt3=None):
+    """Effect of each terrain term, porting and GEOtop 3.0 side by side, one row per station and variant."""
+    gt3 = gt3 or os.environ.get("FRIULI_GT3", DEFAULT_GT3)
+    obs = read_oms(os.path.join(HERE, "data", "observed_snow_depth.csv"))
+    rows = []
+    for s, station in STATIONS.items():
+        o = obs[s].loc["2025-11-01 01:00":"2026-05-01 00:00"].resample("D").mean()
+        for v, folder in TERRAIN.items():
+            row = {"station": station, "variant": v}
+            for model, path in (("porting", os.path.join(HERE, "output", "topography", v, "station_%d" % s, "run",
+                                                         "point.csv")),
+                                ("GEOtop", os.path.join(gt3, folder, FOLDERS[s], "output-tabs", "point0001.txt"))):
+                if not os.path.exists(path):
+                    continue
+                p = read_point(path).loc["2025-11-01 01:00":"2026-05-01 00:00"]
+                d = p.HS.resample("D").mean()
+                both = pd.concat([o, d], axis=1, keys=["o", "m"]).dropna()
+                row[model + " RMSE [m]"] = np.sqrt(((both.m - both.o) ** 2).mean())
+                row[model + " melt-out"] = dates(d.dropna())[1].strftime("%d/%m")
+                row[model + " SWE max"] = p.SWE.max()
+                row[model + " SWnet"] = p.SWnet.mean()
+                row[model + " LWnet"] = p.LWnet.mean()
+            rows.append(row)
+    return pd.DataFrame(rows).set_index(["station", "variant"])
+
+
 def main():
+    if sys.argv[1:2] == ["--terrain"]:
+        pd.set_option("display.width", 250)
+        print(terrain(*sys.argv[2:3]).round(3).to_string())
+        print("\nobserved melt-out: " + ", ".join(
+            "%s %s" % (n, dates(read_oms(os.path.join(HERE, "data", "observed_snow_depth.csv"))[s]
+                               .loc["2025-11-01 01:00":"2026-05-01 00:00"].resample("D").mean().dropna())[1]
+                       .strftime("%d/%m")) for s, n in STATIONS.items()))
+        return
     hs, swe = load(*(sys.argv[1:3] if len(sys.argv) > 2 else ()))
     pd.set_option("display.width", 200)
     for s, name in STATIONS.items():

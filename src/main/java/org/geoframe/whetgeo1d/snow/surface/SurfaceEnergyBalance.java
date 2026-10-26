@@ -26,10 +26,10 @@ package org.geoframe.whetgeo1d.snow.surface;
  * temperature T_s:
  *
  * <pre>
- * EB(T_s)    = SW_net + ε (LW_in - σ T_s⁴) - H - λ E
+ * EB(T_s)    = SW_net + ε (LW_in - V σ T_s⁴) - H - λ E
  * H          = ρ_a c_p (T_s - T_a) / r_h
  * E          = ρ_a (q_sat(T_s) - q_a) / r_v
- * dEB/dT_s   = -4 ε σ T_s³ - ρ_a c_p / r_h - λ ρ_a (dq/de) (de_sat/dT) / r_v
+ * dEB/dT_s   = -4 ε V σ T_s³ - ρ_a c_p / r_h - λ ρ_a (dq/de) (de_sat/dT) / r_v
  * </pre>
  *
  * Port of {@code PointEnergyBalance} and {@code SolvePointEnergyBalance} of GEOtop
@@ -54,9 +54,10 @@ package org.geoframe.whetgeo1d.snow.surface;
  * </ul>
  *
  * <p>
- * The surface longwave emission is ε σ T_s⁴ with no sky-view factor: GEOtop's
- * {@code sky} factor (1 on a flat point) belongs to the radiation component that
- * provides LW_in.
+ * V is the sky view factor of the forcing ({@link SurfaceForcing#skyViewFactor()}):
+ * as in GEOtop ({@code energy.balance.cc:2466}) the surface emits ε V σ T_s⁴,
+ * the terrain it sees in place of the sky being at its own temperature; the
+ * sky's share of LW_in, V ε_a σ T_a⁴, is in the forcing.
  */
 public final class SurfaceEnergyBalance {
 
@@ -173,7 +174,9 @@ public final class SurfaceEnergyBalance {
 				: frozenLatentHeat;
 
 		double emissivity = parameters.emissivity();
-		double netLongwave = emissivity * (forcing.longwaveIn() - AirProperties.emissivePower(surfaceTemperature));
+		double sky = forcing.skyViewFactor();
+		double netLongwave = emissivity
+				* (forcing.longwaveIn() - sky * AirProperties.emissivePower(surfaceTemperature));
 		double sensibleConductance = density * specificHeat / resistances.heatFlux();
 		double sensibleHeat = sensibleConductance * (surfaceTemperature - airTemperature);
 		double saturation = curve.pressure(surfaceTemperature, pressure);
@@ -185,7 +188,7 @@ public final class SurfaceEnergyBalance {
 		double latentHeatFlux = latentHeat * vapourFlux;
 
 		double balance = netShortwave + netLongwave - sensibleHeat - latentHeatFlux;
-		double derivative = -emissivity * AirProperties.dEmissivePower(surfaceTemperature) - sensibleConductance
+		double derivative = -emissivity * sky * AirProperties.dEmissivePower(surfaceTemperature) - sensibleConductance
 				- latentHeat * dVapourFlux;
 		return new SurfaceFluxes(netShortwave, netLongwave, sensibleHeat, latentHeatFlux, vapourFlux, latentHeat,
 				balance, derivative);

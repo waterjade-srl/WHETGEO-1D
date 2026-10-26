@@ -203,8 +203,17 @@ import oms3.annotations.Unit;
  * the same configuration (checked through its hash).
  *
  * <p>
- * Not here: evapotranspiration sinks from GEOET, an initial snowpack, a
- * slope.
+ * <b>Terrain.</b> {@code skyViewFactor} V scales the estimated diffuse
+ * shortwave and sky longwave, and the surface emission to the sky; (1 - V) of
+ * the shortwave the surface reflected in the previous step comes back as
+ * diffuse, as GEOtop with {@code Surroundings = 0}. A slope and a horizon are
+ * not computed here: the beam on the slope, the diffuse and the cosine come
+ * as inputs ({@code inShortwaveDirect}, {@code inShortwaveDiffuse},
+ * {@code inCosIncidence}), e.g. from the fidelity package's
+ * {@code GeotopForcingFiles} (cases/snowsoil/friuli/run_topography.sh).
+ *
+ * <p>
+ * Not here: evapotranspiration sinks from GEOET, an initial snowpack.
  */
 @Description("Snow and soil column: snowpack on WHETGEO-1D's soil, heat of snow and soil as one system, Richards and frozen soil, GEOtop 3.0 physics in the fidelity configuration.")
 @Documentation("")
@@ -359,6 +368,11 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	@Unit("m")
 	public double elevation = 0.0;
+
+	@Description("Sky view factor V of the column, in (0, 1]: the estimated diffuse shortwave and sky longwave are V times the open-sky ones, the surface emits to the sky V of its longwave, and (1 - V) of the shortwave it reflected in the previous step comes back from the terrain as diffuse, as GEOtop with Surroundings = 0.")
+	@In
+	@Unit("-")
+	public double skyViewFactor = 1.0;
 
 	@Description("Clear-sky emissivity of the longwave estimate (GEOtop LWinParameterization).")
 	@In
@@ -747,6 +761,8 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private DiffusionBoundaryConditionType bottomType;
 	private double[] soilDepth;
 	private double[] soilThickness;
+	/** Shortwave reflected by the surface in the last step [W m-2], GEOtop's {@code SWrefl_surr}. */
+	private double reflectedShortwave;
 
 	/** One step of the column. */
 	@Execute
@@ -755,7 +771,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 			setup();
 		}
 		long end = epochSeconds(inCurrentDate);
-		double[] forcingStateBefore = cloudiness.state();
+		double[] forcingStateBefore = forcingState();
 		StepForcing forcing = forcing(end);
 		SnowSoilStepResult result;
 		try {
@@ -778,6 +794,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 			skin = imposed.temperature();
 		}
 		outBareSoilFluxes = bareSoil;
+		reflectedShortwave = reflected(result, bareSoil);
 		// the GEOframe series for GEOET: bare soil only, missing under snow (no soil evaporation there, LINK-2)
 		boolean bare = result.snow().isEmpty() && result.surface() == null;
 		outBareSoilNetRadiation = new HashMap<>(Map.of(stationID,
@@ -1097,7 +1114,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 			try (InputStream in = Files.newInputStream(Path.of(resumeFrom))) {
 				controller = StepController.resume(solver, settings, SnowSoilRestart.read(in), label);
 			}
-			cloudiness = readForcingState(forcingStateFile(Path.of(resumeFrom)));
+			double[] state = readForcingState(forcingStateFile(Path.of(resumeFrom)));
+			cloudiness = DailyCloudiness.Running.of(java.util.Arrays.copyOf(state, state.length - 1));
+			reflectedShortwave = state[state.length - 1];
 		} else {
 			controller = new StepController(solver, settings, epochSeconds(inCurrentDate) - tTimeStep, label);
 		}
@@ -1121,9 +1140,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	/**
 	 * The state of the forcing estimates kept by the component, which a resumed
 	 * run needs to go on bitwise (the running daily cloud transmissivity of
-	 * the longwave estimate), in a file beside the solver's restart state:
-	 * {@code <name>.forcing}. Format: magic, version 1, number of doubles, raw
-	 * doubles.
+	 * the longwave estimate, then the shortwave reflected in the last step),
+	 * in a file beside the solver's restart state: {@code <name>.forcing}.
+	 * Format: magic, version 2, number of doubles, raw doubles. Version 1 had no
+	 * reflected shortwave: it reads as 0.
 	 */
 	private static Path forcingStateFile(Path restart) {
 		String name = restart.getFileName().toString();
@@ -1134,13 +1154,20 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private static final int FORCING_STATE_MAGIC = 0x534E4643; // "SNFC"
 
 	private void writeForcingState(Path file) throws IOException {
-		writeForcingState(file, cloudiness.state());
+		writeForcingState(file, forcingState());
+	}
+
+	private double[] forcingState() {
+		double[] cloud = cloudiness.state();
+		double[] state = java.util.Arrays.copyOf(cloud, cloud.length + 1);
+		state[cloud.length] = reflectedShortwave;
+		return state;
 	}
 
 	private static void writeForcingState(Path file, double[] state) throws IOException {
 		try (var out = new java.io.DataOutputStream(new java.io.BufferedOutputStream(Files.newOutputStream(file)))) {
 			out.writeInt(FORCING_STATE_MAGIC);
-			out.writeInt(1);
+			out.writeInt(2);
 			out.writeInt(state.length);
 			for (double v : state) {
 				out.writeLong(Double.doubleToRawLongBits(v));
@@ -1148,19 +1175,20 @@ public class SnowSoilSolver1DMain extends HMModel {
 		}
 	}
 
-	private static DailyCloudiness.Running readForcingState(Path file) throws IOException {
+	private static double[] readForcingState(Path file) throws IOException {
 		if (!Files.exists(file)) {
 			throw new IOException("missing the forcing state " + file + " beside the restart state");
 		}
 		try (var in = new java.io.DataInputStream(new java.io.BufferedInputStream(Files.newInputStream(file)))) {
-			if (in.readInt() != FORCING_STATE_MAGIC || in.readInt() != 1) {
-				throw new IOException("not a forcing state of version 1: " + file);
+			int version = in.readInt() == FORCING_STATE_MAGIC ? in.readInt() : -1;
+			if (version != 1 && version != 2) {
+				throw new IOException("not a forcing state of version 1 or 2: " + file);
 			}
-			double[] state = new double[in.readInt()];
-			for (int i = 0; i < state.length; i++) {
+			double[] state = new double[in.readInt() + (version == 1 ? 1 : 0)];
+			for (int i = 0; i < state.length - (version == 1 ? 1 : 0); i++) {
 				state[i] = Double.longBitsToDouble(in.readLong());
 			}
-			return DailyCloudiness.Running.of(state);
+			return state;
 		}
 	}
 
@@ -1296,6 +1324,22 @@ public class SnowSoilSolver1DMain extends HMModel {
 
 	/* -------------------------------------------------------------- forcing */
 
+	/**
+	 * Shortwave the surface reflected in the step [W m-2]: the snow albedo of
+	 * the step, the bare-soil balance where the solver used one, the ground
+	 * albedo otherwise.
+	 */
+	private double reflected(SnowSoilStepResult result, SurfaceFluxes bareSoil) {
+		double incoming = outShortwaveGlobal;
+		if (!Double.isNaN(result.albedo())) {
+			return result.albedo() * incoming;
+		}
+		if (bareSoil != null) {
+			return Math.max(0.0, incoming - bareSoil.netShortwave());
+		}
+		return groundAlbedo * incoming;
+	}
+
 	private StepForcing forcing(long end) {
 		double dt = tTimeStep;
 		double ta = required(inAirTemperature, "air temperature") + MELTING_TEMPERATURE;
@@ -1328,6 +1372,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 					stepTau * clouds.atmosphericTransmissivity(jdBegin, jdEnd, jdMid, p, rh, ta));
 			diffuse = kd * global;
 			direct = global - diffuse;
+			diffuse *= skyViewFactor;
 		} else {
 			double global = Math.max(0.0, required(inShortwaveGlobal, "shortwave (global, or direct and diffuse)"));
 			stepTau = clouds.fromGlobal(jdBegin, jdEnd, jdMid, global, p, rh, ta);
@@ -1340,7 +1385,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 				diffuse = kd * global;
 				direct = global - diffuse;
 			}
+			diffuse *= skyViewFactor;
 		}
+		// the terrain in view reflects what the surface reflected (GEOtop's SWrefl_surr, Surroundings = 0)
+		diffuse += (1.0 - skyViewFactor) * reflectedShortwave;
 		double cos = Math.sin(height);
 		double givenCos = value(inCosIncidence);
 		if (!Double.isNaN(givenCos)) {
@@ -1359,14 +1407,14 @@ public class SnowSoilSolver1DMain extends HMModel {
 		tau = Math.max(0.0, Math.min(1.0, tau));
 		double lw = value(inLongwaveIn);
 		if (Double.isNaN(lw)) {
-			lw = IncomingLongwave.of(emissivity, ta, rh, p, tau, 1.0);
+			lw = IncomingLongwave.of(emissivity, ta, rh, p, tau, skyViewFactor);
 		}
 		outPressure = p;
 		outLongwaveIn = lw;
 		outCloudTransmissivity = tau;
 		outShortwaveGlobal = direct + diffuse;
 		SurfaceForcing surface = new SurfaceForcing(direct, diffuse, Math.max(0.0, Math.min(1.0, cos)), lw, ta, rh,
-				wind, p);
+				wind, p, skyViewFactor);
 
 		double rain = value(inRainfall);
 		double snow = value(inSnowfall);
