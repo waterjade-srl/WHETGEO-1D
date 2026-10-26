@@ -27,8 +27,9 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIONS = {1: "Chiansaveit", 2: "Sauris di sopra", 3: "Sauris di sotto", 4: "Casera Pieltinis"}
 FOLDERS = {1: "1_Chiansaveit", 2: "2_Sauris_di_sopra", 3: "3_Sauris_di_sotto", 4: "4_Casera_Pieltinis"}
-DEFAULT_GT3 = os.path.expanduser("~/WORK/COMMESSE/2026_RigonianLab/work/geo2geo/casi/Friuli/gt3")
-DEFAULT_MOBYGIS = os.path.expanduser("~/git/geotop_moby/pysnow/tests/gt_sim1D/output_tabs")
+# GEOtop runs and MobyGIS output: from the arguments or FRIULI_GT3 / FRIULI_MOBYGIS; skipped if not given
+DEFAULT_GT3 = ""
+DEFAULT_MOBYGIS = ""
 SNOW = 0.05  # snow on the ground: daily mean HS at least 5 cm [m]
 # terrain variants: name in the porting, name of the GEOtop 3.0 folder
 # (horizon and topography: GEOtop with the sky view factor from the point horizon, as the port; the map's is not

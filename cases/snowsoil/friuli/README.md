@@ -81,6 +81,21 @@ each value referring to the hour that ends at its date:
 All of this is the **recommended configuration** (`configuration = recommended`): the choices of the design
 for new simulations, with the parameters of the library. Nothing is calibrated on these stations.
 
+## Getting the data
+
+The data of this case are not in the repository: the station series come from the Friuli Venezia Giulia
+network through a MobyGIS run, and are shared separately as `friuli_data.tar.gz` (ask the maintainers). From
+the root of the repository:
+
+```bash
+tar xzf friuli_data.tar.gz                               # writes data/ and grid/ of this case
+(cd cases/snowsoil/friuli && sha256sum -c DATA.sha256)   # the files these results were made with
+```
+
+The comparison with GEOtop 3.0 and MobyGIS (`compare.py`, the notebook) also needs their runs, outside this
+repository: `FRIULI_GT3=<folder of the GEOtop 3.0 runs>` and `FRIULI_MOBYGIS=<its output_tabs>`; without them
+those columns are skipped.
+
 ## How to run it
 
 From the root of the repository, with JDK 21 and Maven:
@@ -181,7 +196,7 @@ Daily snow depth against the stake, operational run (`cell`):
 
 `run_topography.sh` runs the column with GEOtop 3.0's own terrain radiation (`make_topography.py`, through
 `GeotopForcingFiles` of the fidelity package), one term at a time, next to GEOtop 3.0 with the same geometry
-(`casi/Friuli`, outside this repository). Settings:
+(outside this repository, `FRIULI_GT3`). Settings:
 
 - V from the 72-direction point horizon: flat in `horizon`, on the slope in `topography`;
 - rain and snow per unit area of the slope;
