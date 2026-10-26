@@ -18,8 +18,10 @@ Variants, as the GEOtop 3.0 runs of the same stations:
     slope       slope and aspect of the point, no horizon, V = 1
     topography  all of them, V from the horizon on the slope
 
-Slope and aspect are those of the 250 m map cell of the station, the horizon that of the point, both
-from the MobyGIS-GEOtop point run `pysnow/tests/gt_sim1D` (repository geotop_moby), as in make_inputs.py.
+Slope and aspect are those of the 250 m map cell of the station, from the MobyGIS-GEOtop point run
+`pysnow/tests/gt_sim1D` (repository geotop_moby), as in make_inputs.py. The horizon of each point is
+data/horizon/horizon000N.txt, computed from a 3" DEM (README.md): the horizons of the source have north and
+south swapped.
 
 Writes, next to this script:
 
@@ -106,16 +108,16 @@ def sky_view_factor(azimuth, height, slope, aspect, n=3600):
                          + np.sin(b) * np.cos(phi - a) * (zenith - np.sin(zenith) * np.cos(zenith))))
 
 
-def point_horizon(source, s):
-    """Azimuths and heights [deg] of the point horizon of station s in the source."""
-    with open(os.path.join(source, "horizon_point", f"horizon{s:04d}.txt")) as f:
+def point_horizon(s):
+    """Azimuths and heights [deg] of the horizon of station s (data/horizon/)."""
+    with open(os.path.join(HERE, "data", "horizon", f"horizon{s:04d}.txt")) as f:
         rows = list(csv.DictReader(f))
     return np.array([float(r["azimuth"]) for r in rows]), np.array([float(r["horizon_height"]) for r in rows])
 
 
 def geometry(source):
     """Slope, aspect and V of the map cell of each station (the points of ListPoints.txt). The V of the map is not
-    consistent with the point horizons (0.78-0.87 against 0.85-0.98 from the horizons): it is kept for
+    consistent with the point horizons (0.78-0.87 against 0.94-0.98 from the horizons): it is kept for
     traceability only, the runs take V from the horizon (sky_view_factor)."""
     maps = {n: read_grid(os.path.join(source, "input_maps", f"{n}_250m3035.asc")) for n in ("slp", "asp", "svf")}
     with open(os.path.join(source, "ListPoints.txt")) as f:
@@ -130,14 +132,14 @@ def main():
     with open(os.path.join(HERE, "data", "geometry.csv"), "w") as f:
         f.write("id,slope,aspect,skyViewFactor,skyViewFactorFlat,skyViewFactorMap\n")
         for s, (slope, aspect, sky) in geo.items():
-            az, h = point_horizon(source, s)
+            az, h = point_horizon(s)
             f.write(f"{s},{slope:g},{aspect:g},{sky_view_factor(az, h, slope, aspect):.4f},"
                     f"{sky_view_factor(az, h, 0.0, 0.0):.4f},{sky:.4f}\n")
     series = {n: read_oms(os.path.join(HERE, "data", n + ".csv")) for n in SERIES}
     for variant, (with_horizon, with_sky, with_slope) in VARIANTS.items():
         for s, (lat, lon, z) in STATIONS.items():
             slope, aspect, _ = geo[s]
-            az, h = point_horizon(source, s)
+            az, h = point_horizon(s)
             # V from the horizon, on the slope where the variant has one
             sky = sky_view_factor(az, h, slope, aspect) if with_slope else sky_view_factor(az, h, 0.0, 0.0)
             folder = os.path.join(HERE, "output", "topography", variant, f"station_{s}")
@@ -156,7 +158,7 @@ def main():
             horizon = "horizon0001.txt"
             with open(os.path.join(folder, horizon), "w") as f:
                 if with_horizon:
-                    with open(os.path.join(source, "horizon_point", f"horizon{s:04d}.txt")) as h:
+                    with open(os.path.join(HERE, "data", "horizon", f"horizon{s:04d}.txt")) as h:
                         f.write(h.read())
                 else:
                     f.write("azimuth,horizon_height\n0,0\n90,0\n180,0\n270,0\n")

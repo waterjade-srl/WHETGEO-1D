@@ -9,14 +9,14 @@ Layers and tables (SI units, eta negative in the soil):
   svf_map [-] the sky view factor of the source map (kept for traceability, not used: see below),
   site_type ('stake'), wind_height and temperature_height [m] of the sensors;
 - horizon (attributes): point_id, azimuth [deg, from north clockwise], height [deg]; 16 directions, every
-  22.5 deg, interpolated from the 72 of the source;
+  22.5 deg, interpolated from the 72 of data/horizon/ (computed from a 3" DEM, README.md);
 - soil_layers, soil_parameters, soil_parameter_types, initial_condition (attributes): the WHETGEO-1D soil
   inputs (the columns of the CSV files of grid/) with a profile_id, or an ic_id for the initial condition;
 - columns (attributes): id, point_id, profile_id, ic_id: one row per 1D run;
 - provenance (attributes): key, value.
 
 The sky view factor of the source map (0.78-0.87) is not consistent with the point horizons: from the
-same horizons it is 0.85-0.98. The column takes the one computed from the horizon.
+horizons it is 0.94-0.98. The column takes the one computed from the horizon.
 
 Usage: python3 make_case.py [source_folder]
        default source: ~/git/geotop_moby/pysnow/tests/gt_sim1D
@@ -69,7 +69,7 @@ def main():
     points, horizon = [], []
     for s, (lat, lon, z) in STATIONS.items():
         slope, aspect, svf_map = geo[s]
-        with open(os.path.join(source, "horizon_point", f"horizon{s:04d}.txt")) as f:
+        with open(os.path.join(HERE, "data", "horizon", f"horizon{s:04d}.txt")) as f:
             rows = list(csv.DictReader(f))
         h16 = periodic(np.array([float(r["azimuth"]) for r in rows]),
                        np.array([float(r["horizon_height"]) for r in rows]), DIRECTIONS)
@@ -104,12 +104,13 @@ def main():
                    [(s, s, 1, 1, NAMES[s]) for s in STATIONS], ["INTEGER", "INTEGER", "INTEGER", "INTEGER", "TEXT"],
                    "one row per 1D run")
         sources = [os.path.join(source, "ListPoints.txt")] + [
-            os.path.join(source, "horizon_point", f"horizon{s:04d}.txt") for s in STATIONS] + [
+            os.path.join(HERE, "data", "horizon", f"horizon{s:04d}.txt") for s in STATIONS] + [
             os.path.join(source, "input_maps", f"{n}_250m3035.asc") for n in ("slp", "asp", "svf")]
         prov = [("schema", "geo2geo 1D case, version 1"), ("case", "Friuli, 4 stations of the FVG network"),
                 ("source", "MobyGIS-GEOtop point run pysnow/tests/gt_sim1D"),
                 ("written", datetime.date.today().isoformat()), ("script", "cases/snowsoil/friuli/make_case.py"),
-                ("svf", "computed from the 16-direction horizon and the slope (Dozier and Frew 1990); svf_map kept")]
+                ("svf", "computed from the 16-direction horizon and the slope (Dozier and Frew 1990); svf_map kept"),
+                ("horizon", "data/horizon/: from a 3 arc-second DEM, 20 km search radius, observer 2 m above the DEM")]
         prov += [("sha256:" + os.path.basename(p), hashlib.sha256(open(p, "rb").read()).hexdigest()) for p in sources]
         attributes(con, "provenance", ["key", "value"], prov, ["TEXT", "TEXT"], "where the data come from")
     print(gpd.read_file(GPKG, layer="points").drop(columns="geometry").to_string(index=False))
