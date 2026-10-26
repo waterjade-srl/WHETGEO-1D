@@ -2,7 +2,8 @@ geotop/meteo0001.txt
 .cp.txt
 .run.log
 .flag.log
-data/
+data/*
+!data/arf_1d.gpkg
 output/
 output_geoet/
 output_noevap/

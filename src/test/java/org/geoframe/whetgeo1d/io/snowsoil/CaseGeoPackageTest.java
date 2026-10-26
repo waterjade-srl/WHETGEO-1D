@@ -27,57 +27,81 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.Horizon;
 import org.junit.Test;
 
 /**
- * {@link CaseGeoPackage} on the Friuli case ({@code cases/snowsoil/friuli/data/friuli.gpkg},
- * written by its {@code make_case.py}).
+ * {@link CaseGeoPackage} on the GeoPackages of two cases of the repository,
+ * written by {@code tools/geotop2case} from GEOtop 3.0's official tests
+ * ({@code make_case.sh} of each case): Matsch_P2_Ref_007 (a slope, no point
+ * horizon) and ARF_1D (50 soil layers).
  */
 public class CaseGeoPackageTest {
 
-	private static final CaseGeoPackage FRIULI = new CaseGeoPackage(
-			Path.of("cases/snowsoil/friuli/data/friuli.gpkg"));
+	private static final String MATSCH = "cases/snowsoil/matsch_p2_ref_007/";
+	private static final String ARF = "cases/snowsoil/arf_1d/";
+
+	private static CaseGeoPackage file(String folder, String name) {
+		return new CaseGeoPackage(Path.of(folder + "data/" + name + ".gpkg"));
+	}
 
 	@Test
 	public void columnPointAndHorizon() {
-		CaseGeoPackage.Column c = FRIULI.column(3);
-		assertEquals(3, c.pointId());
-		CaseGeoPackage.Point p = FRIULI.point(c.pointId());
-		assertEquals("Sauris di sotto", p.name());
-		assertEquals(1200.0, p.elevation(), 0.0);
-		assertEquals(11.0, p.slope(), 0.0);
-		assertEquals(201.0, p.aspect(), 0.0);
-		assertEquals(5.0, p.windHeight(), 0.0);
-		Horizon h = FRIULI.horizon(3);
-		assertEquals(16, h.azimuth().length);
-		assertEquals(22.5, h.azimuth()[1], 0.0);
+		CaseGeoPackage matsch = file(MATSCH, "matsch_p2_ref_007");
+		CaseGeoPackage.Column c = matsch.column(1);
+		assertEquals(1, c.pointId());
+		CaseGeoPackage.Point p = matsch.point(c.pointId());
+		assertEquals("Matsch P2", p.name());
+		assertEquals(1549.0, p.elevation(), 0.0);
+		assertEquals(21.4, p.slope(), 0.0);
+		assertEquals(221.6, p.aspect(), 0.0);
+		assertEquals(2.5, p.windHeight(), 0.0);
+		assertEquals(2.0, p.temperatureHeight(), 0.0);
+		// GEOtop's run has no point horizon file: flat
+		assertEquals(1, matsch.horizon(1).azimuth().length);
+		assertEquals(0.0, matsch.horizon(1).height()[0], 0.0);
 	}
 
-	/** The soil of a column is the same as WHETGEO-1D's CSV inputs it was written from. */
+	/** The soil of a column is the one of the case's hand-written CSV inputs, to the digits printed there. */
 	@Test
 	public void soilGridAsTheCsvInputs() throws Exception {
-		Path folder = FRIULI.soilGridFolder(FRIULI.column(1));
+		assertSameSoil(file(MATSCH, "matsch_p2_ref_007"), MATSCH + "grid");
+		assertSameSoil(file(ARF, "arf_1d"), ARF + "grid");
+	}
+
+	private static void assertSameSoil(CaseGeoPackage file, String csvFolder) throws Exception {
+		Path folder = file.soilGridFolder(file.column(1));
 		SoilGridInputs fromCase;
 		try {
 			fromCase = SoilGridInputs.read(folder.toString());
 		} finally {
 			CaseGeoPackage.delete(folder);
 		}
-		SoilGridInputs fromCsv = SoilGridInputs.read("cases/snowsoil/friuli/grid");
-		assertArrayEquals(fromCsv.eta, fromCase.eta, 0.0);
-		assertArrayEquals(fromCsv.controlVolume, fromCase.controlVolume, 0.0);
-		assertArrayEquals(fromCsv.psi, fromCase.psi, 0.0);
-		assertArrayEquals(fromCsv.temperature, fromCase.temperature, 0.0);
-		assertArrayEquals(fromCsv.thetaS, fromCase.thetaS, 0.0);
-		assertArrayEquals(fromCsv.ks, fromCase.ks, 0.0);
-		assertArrayEquals(fromCsv.par1SWRC, fromCase.par1SWRC, 0.0);
-		assertArrayEquals(fromCsv.par2SWRC, fromCase.par2SWRC, 0.0);
-		assertArrayEquals(fromCsv.parameterID, fromCase.parameterID);
+		SoilGridInputs fromCsv = SoilGridInputs.read(csvFolder);
+		assertArrayEquals(fromCsv.eta, fromCase.eta, 1e-6);
+		assertArrayEquals(fromCsv.controlVolume, fromCase.controlVolume, 1e-6);
+		assertArrayEquals(fromCsv.psi, fromCase.psi, 1e-8);
+		assertArrayEquals(fromCsv.temperature, fromCase.temperature, 1e-9);
+		// parameters by cell: the CSV inputs may repeat a set that the GeoPackage holds once
+		assertArrayEquals(byCell(fromCsv, fromCsv.thetaS), byCell(fromCase, fromCase.thetaS), 0.0);
+		assertArrayEquals(byCell(fromCsv, fromCsv.thetaR), byCell(fromCase, fromCase.thetaR), 0.0);
+		assertArrayEquals(byCell(fromCsv, fromCsv.ks), byCell(fromCase, fromCase.ks), 1e-15);
+		assertArrayEquals(byCell(fromCsv, fromCsv.par1SWRC), byCell(fromCase, fromCase.par1SWRC), 0.0);
+		assertArrayEquals(byCell(fromCsv, fromCsv.par2SWRC), byCell(fromCase, fromCase.par2SWRC), 0.0);
+		assertArrayEquals(byCell(fromCsv, fromCsv.soilParticlesThermalConductivity),
+				byCell(fromCase, fromCase.soilParticlesThermalConductivity), 0.0);
 	}
 
-	/** The svf stored by make_case.py (Python) and the one computed here from the same horizon agree. */
+	private static double[] byCell(SoilGridInputs g, double[] bySet) {
+		double[] v = new double[g.parameterID.length];
+		for (int i = 0; i < v.length; i++) {
+			v[i] = g.parameterID[i] > 0 ? bySet[g.parameterID[i]] : Double.NaN;
+		}
+		return v;
+	}
+
+	/** The svf stored by geotop2case (Python) and the one computed here from the same horizon agree. */
 	@Test
 	public void skyViewFactorFromTheHorizon() {
-		for (int id = 1; id <= 4; id++) {
-			CaseGeoPackage.Point p = FRIULI.point(id);
-			assertEquals("point " + id, p.svf(), FRIULI.horizon(id).skyViewFactor(p.slope(), p.aspect()), 1e-4);
+		for (CaseGeoPackage f : new CaseGeoPackage[] { file(MATSCH, "matsch_p2_ref_007"), file(ARF, "arf_1d") }) {
+			CaseGeoPackage.Point p = f.point(1);
+			assertEquals(f.file().toString(), p.svf(), f.horizon(1).skyViewFactor(p.slope(), p.aspect()), 1e-4);
 		}
 	}
 
