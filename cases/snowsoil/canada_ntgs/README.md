@@ -17,6 +17,17 @@ This case runs the snow+soil column on the two NTGS boreholes near Inuvik (NWT, 
 
 **Period.** The comparison runs over 01/09/2021–01/09/2023; the first year is warm-up.
 
+## Getting the data
+
+The inputs of this case are not in the repository: the GEOtop runs they come from (forcing from ERA5 and
+JRA-3Q, GEOtop's hourly reference) are shared separately as `canada_ntgs_data.tar.gz` (ask the maintainers).
+From the root of the repository:
+
+```bash
+tar xzf canada_ntgs_data.tar.gz                               # writes geotop/ and grid/ of this case
+(cd cases/snowsoil/canada_ntgs && sha256sum -c DATA.sha256)   # the files these results were made with
+```
+
 ## Run
 
 ```bash
@@ -27,7 +38,7 @@ python3 cases/snowsoil/canada_ntgs/compare.py      # comparison table
 
 Then open `Jupyter_Notebook/7_Canada_NTGS_Fidelity.ipynb`.
 
-`python3 make_inputs.py [sims_folder]` regenerates `geotop/` and `grid/` from the GEOtop runs.
+`python3 make_inputs.py <sims_folder>` (or `CANADA_SIMS`) regenerates `geotop/` and `grid/` from the GEOtop runs.
 
 For sensitivity runs, `-D` overrides of the .sim go through `SIM_OPTS`, and the output goes to `output/<case>_<LABEL>/`:
 
@@ -47,6 +58,7 @@ The other overrides are `-DheatTolerance=` and `-DendDate=`.
 | `snowsoil_canada_ntgs.sim` | the OMS3 simulation, one case per run (`-Dcase=`) |
 | `run.sh`, `make_inputs.py`, `compare.py` | run, inputs, comparison |
 | `data/`, `output/` | forcing and outputs (not versioned) |
+| `DATA.sha256` | SHA-256 of `geotop/` and `grid/`, which are not versioned (see above) |
 
 `reference.csv.gz` holds GEOtop's hourly results:
 

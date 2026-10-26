@@ -18,7 +18,7 @@ For each of the four cases this writes geotop/<site>_<forcing>/ with the followi
 - grid/: the soil as WHETGEO-1D CSV inputs. It has the 20 layers of soil0001.txt in eta, one parameter set per
   layer, and the initial psi (InitPres) and T (InitTemp) at the layer centres.
 
-Usage: python3 make_inputs.py [sims_folder]    (default: $CANADA_SIMS, or the workspace path)
+Usage: python3 make_inputs.py [sims_folder]    (default: $CANADA_SIMS)
 """
 import gzip
 import os
@@ -26,7 +26,6 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_SIMS = os.path.expanduser("~/WORK/COMMESSE/2026_RigonianLab/work/geo2geo/casi/Canada_NTGS/sims")
 SITES = {
     # latitude, longitude, elevation [m], slope [deg], aspect [deg] (siti.py of the GEOtop project)
     "NTGS1": (68.538402, -133.773038, 96.0, 30.0, 0.0),
@@ -146,7 +145,9 @@ geotopPointFile = reference.csv
 
 
 def main():
-    sims = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CANADA_SIMS", DEFAULT_SIMS)
+    sims = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CANADA_SIMS")
+    if not sims:
+        sys.exit("usage: make_inputs.py <folder of the GEOtop runs>  (or set CANADA_SIMS)")
     for case in cases():
         site = case.split("_")[0]
         src = os.path.join(sims, case + "_senza_chioma_corretta")

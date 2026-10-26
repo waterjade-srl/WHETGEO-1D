@@ -1,4 +1,0 @@
-spDensity,spConductivity,spSpecificHeatCapacity,thetaS,thetaR,meltingT,alpha,n,alphaSpecificStorage,betaSpecificStorage,Ks
-# soil0001.txt of gt_sim1D: a = 0.004 mm-1, n = 1.1, SS = 1e-6 mm-1, Kv = 1e-7 mm/s; solids of geotop.inpts
-2300,2.5,1000,0.40,0.0,273.15,4.0,1.1,1.0193679918450561e-07,0.0,1e-10
-2300,2.5,1000,0.35,0.0,273.15,4.0,1.1,1.0193679918450561e-07,0.0,1e-10

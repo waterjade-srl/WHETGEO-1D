@@ -536,11 +536,12 @@ def main(argv=None):
                    "WHETGEO-1D initial_condition")
         attributes(con, "columns", ["id", "point_id", "profile_id", "ic_id", "note"], columns,
                    ["INTEGER", "INTEGER", "INTEGER", "INTEGER", "TEXT"], "one row per 1D run")
-        prov = [("schema", SCHEMA), ("case", a.case), ("source", "GEOtop 3.0 point runs: " + ", ".join(a.runs)),
+        root = os.path.dirname(os.path.commonpath([os.path.abspath(r) for r in a.runs]))
+        runs = ", ".join(os.path.relpath(os.path.abspath(r), root) for r in a.runs)
+        prov = [("schema", SCHEMA), ("case", a.case), ("source", "GEOtop 3.0 point runs: " + runs),
                 ("written", datetime.date.today().isoformat()), ("script", "tools/geotop2case/geotop2case.py"),
                 ("svf", f"computed from the {a.directions}-direction horizon and the slope (Dozier and Frew 1990); "
                         "svf_geotop is the one of the GEOtop run")]
-        root = os.path.dirname(os.path.commonpath([os.path.abspath(r) for r in a.runs]))
         seen = []
         for p in sources:
             if p not in seen:

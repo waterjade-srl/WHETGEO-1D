@@ -1,5 +1,6 @@
 data/
 output/
 .cp.txt
-geotop/*/meteo0001.txt
-geotop/*/reference.csv
+# case data, not versioned: see README.md (Data) and DATA.sha256
+geotop/
+grid/

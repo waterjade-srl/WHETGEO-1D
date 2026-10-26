@@ -2,3 +2,5 @@ output/
 output_seb/
 .cp.txt
 .run.log
+data/*
+!data/matsch_p2_ref_007.gpkg
