@@ -50,6 +50,11 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
  * <li>cloud transmissivity of the step from the global shortwave
  * ({@code find_tau_cloud_station}; {@link CloudTransmissivity#fromGlobal},
  * flat station, V = 1), and, where undefined (night), the averaged one;</li>
+ * <li>with a cloud transmissivity column ({@code HeaderCloudSWTransmissivity},
+ * {@link Headers#cloudTransmissivity()}) and no shortwave measured: its step
+ * mean, clamped to [0, 1], is both the averaged and the step transmissivity
+ * ({@code find_actual_cloudiness}, {@code radiation.cc:1137-1147};
+ * {@code energy.balance.cc:452});</li>
  * <li>averaged cloud transmissivity of the longwave: GEOtop's daily series
  * on the records of the file ({@code cloudiness}, {@code clouds.cc}): each
  * record's τ<sub>c</sub> from the measured shortwave over the interval
@@ -89,14 +94,16 @@ public final class GeotopForcing {
 	 *                   ({@code HeaderLWin}); null for none. Where the column
 	 *                   has a value GEOtop uses it as it is, in place of its
 	 *                   estimate ({@code energy.balance.cc:603-606})
+	 * @param cloudTransmissivity header of the cloud transmissivity
+	 *                   ({@code HeaderCloudSWTransmissivity}); null for none
 	 */
 	public record Headers(String precipitation, String windSpeed, String relativeHumidity, String airTemperature,
-			String shortwaveGlobal, String longwaveIn) {
+			String shortwaveGlobal, String longwaveIn, String cloudTransmissivity) {
 
-		/** Without measured longwave. */
+		/** Without measured longwave and cloud transmissivity. */
 		public Headers(String precipitation, String windSpeed, String relativeHumidity, String airTemperature,
 				String shortwaveGlobal) {
-			this(precipitation, windSpeed, relativeHumidity, airTemperature, shortwaveGlobal, null);
+			this(precipitation, windSpeed, relativeHumidity, airTemperature, shortwaveGlobal, null, null);
 		}
 
 		/** GEOtop's own default names. */
@@ -196,6 +203,12 @@ public final class GeotopForcing {
 		double[] tau = new double[n];
 		boolean[] daylight = new boolean[n];
 		double[] sw = meteo.column(headers.shortwaveGlobal());
+		if (sw == null) {
+			// no shortwave measured: no series (a cloud transmissivity column takes its place)
+			double[] none = new double[n];
+			java.util.Arrays.fill(none, Double.NaN);
+			return none;
+		}
 		double[] rh = meteo.column(headers.relativeHumidity());
 		double[] ta = meteo.column(headers.airTemperature());
 		SlopeShortwave flat = new SlopeShortwave(site, ClearSkyTransmissivity.geotop(), 0.0, 0.0, 1.0,
@@ -236,15 +249,18 @@ public final class GeotopForcing {
 		double global = Math.max(0.0, meteo.stepMean(headers.shortwaveGlobal(), begin, end));
 		GeotopPrecipitation.Split split = precipitation.split(intensity, ta, timeStep);
 
-		double averaged = stepMeanOfSeries(begin, end);
+		double given = headers.cloudTransmissivity() == null ? Double.NaN
+				: meteo.stepMean(headers.cloudTransmissivity(), begin, end);
+		double averaged = Double.isNaN(given) ? stepMeanOfSeries(begin, end) : given;
 		averaged = Double.isNaN(averaged) ? kimball(ta, rh / 100.0, elevation) : Math.max(0.0, Math.min(1.0, averaged));
 
 		double dayEnd = dayOfYear(end);
 		double dayBegin = dayEnd - timeStep / 86400.0;
 		double taK = ta + MELTING_TEMPERATURE;
 		double humidity = rh / 100.0;
-		double stepTau = clouds.fromGlobal(dayBegin, dayEnd, 0.5 * (dayBegin + dayEnd), global, pressure,
-				Math.max(humidity, 0.01), taK);
+		double stepTau = Double.isNaN(global) ? Double.NaN
+				: clouds.fromGlobal(dayBegin, dayEnd, 0.5 * (dayBegin + dayEnd), global, pressure,
+						Math.max(humidity, 0.01), taK);
 		if (Double.isNaN(stepTau)) {
 			stepTau = averaged;
 		}

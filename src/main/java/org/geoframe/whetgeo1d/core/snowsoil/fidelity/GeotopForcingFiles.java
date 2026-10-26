@@ -172,17 +172,20 @@ public final class GeotopForcingFiles {
 	 * The column headers: GEOtop's defaults, or the optional keys
 	 * {@code precipitationHeader}, {@code windSpeedHeader},
 	 * {@code relativeHumidityHeader}, {@code airTemperatureHeader},
-	 * {@code shortwaveGlobalHeader} and {@code longwaveInHeader} (the measured
-	 * incoming longwave; absent or empty: estimated).
+	 * {@code shortwaveGlobalHeader}, {@code longwaveInHeader} (the measured
+	 * incoming longwave; absent or empty: estimated) and
+	 * {@code cloudTransmissivityHeader} (absent or empty: none).
 	 */
 	static GeotopForcing.Headers headers(Properties p) {
 		GeotopForcing.Headers d = GeotopForcing.Headers.geotop();
 		String lw = p.getProperty("longwaveInHeader", "").trim();
+		String tau = p.getProperty("cloudTransmissivityHeader", "").trim();
 		return new GeotopForcing.Headers(p.getProperty("precipitationHeader", d.precipitation()).trim(),
 				p.getProperty("windSpeedHeader", d.windSpeed()).trim(),
 				p.getProperty("relativeHumidityHeader", d.relativeHumidity()).trim(),
 				p.getProperty("airTemperatureHeader", d.airTemperature()).trim(),
-				p.getProperty("shortwaveGlobalHeader", d.shortwaveGlobal()).trim(), lw.isEmpty() ? null : lw);
+				p.getProperty("shortwaveGlobalHeader", d.shortwaveGlobal()).trim(), lw.isEmpty() ? null : lw,
+				tau.isEmpty() ? null : tau);
 	}
 
 	private static void add(Map<String, List<double[]>> series, String name, long t, double v) {

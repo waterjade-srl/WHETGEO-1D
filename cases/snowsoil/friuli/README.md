@@ -124,9 +124,57 @@ Daily mean snow depth against the measurement, over the days with a measurement:
 | Sauris di sotto | 0.04 m | 0.09 m | 0.73 / 0.74 m | 17/03 / 27/03 |
 | Casera Pieltinis | 0.11 m | 0.17 m | 1.26 / 1.22 m | 13/04 / 16/04 |
 
-The snow appears on the same days as measured, within 0–8 days. At Chiansaveit every model, GEOtop included,
-loses the pack two weeks early and stays 0.2–0.5 m low from March. That points at the precipitation at the
-highest and windiest station (undercatch, or snow drifting onto the stake) more than at the snow physics.
+The snow appears on the same days as measured, within 0–8 days. At Chiansaveit the porting and GEOtop lose the
+pack two weeks early and stay 0.2–0.5 m low from March. NivoGEO-1D, with the same forcing, keeps it to the
+end of the season (RMSE 0.09 m with the terrain, 0.16 m flat), so undercatch at the stake alone does not
+explain it: part of the gap is in the energy balance.
+
+## On the terrain of the stations
+
+`run_topography.sh` runs the same column with the radiation of the station's terrain, in five variants:
+
+| Variant | Slope and aspect | Horizon | Sky view factor V |
+|---|---|---|---|
+| `flat` | 0 | flat | 1 |
+| `shade` | 0 | of the point | 1 |
+| `horizon` | 0 | of the point | of the map cell |
+| `slope` | of the map cell | flat | 1 |
+| `topography` | of the map cell | of the point | of the map cell |
+
+Slope, aspect and V come from the 250 m maps of the source run at the station (`data/geometry.csv`): 20° NNE,
+0°, 11° SSW and 12° SSE, V = 0.78, 0.83, 0.78, 0.87. The horizon is the point horizon of the source.
+
+- **Forcing** (`make_topography.py`): GEOtop 3.0's own computation, through `GeotopForcingFiles` of the
+  fidelity package on a GEOtop meteo file written from `data/`. The clear-sky shortwave times τ_c is split
+  with Erbs; the beam is projected on the slope and hidden by the horizon; the diffuse is multiplied by V.
+  The sky longwave is V ε_a σ T_a⁴. Rain and snow are counted per unit area of the slope, P cos β.
+- **Column** (`snowsoil_friuli_topography.sim`): `skyViewFactor` = V. The surface emits V ε σ T_s⁴ to the
+  sky, and (1 − V) of the shortwave it reflected in the previous step returns as diffuse, as GEOtop does
+  with `Surroundings = 0`.
+
+The `flat` variant reproduces `snowsoil_friuli.sim` within 0.001 m of RMSE.
+
+| Station | flat | shade | horizon | slope | topography | GEOtop 3.0 flat / topography |
+|---|---|---|---|---|---|---|
+| Chiansaveit | 0.29 m | 0.29 m | 0.39 m | 0.19 m | 0.25 m | 0.40 / 0.32 m |
+| Sauris di sopra | 0.07 m | 0.11 m | 0.10 m | 0.07 m | 0.10 m | 0.13 / 0.11 m |
+| Sauris di sotto | 0.04 m | 0.09 m | 0.07 m | 0.09 m | 0.08 m | 0.09 / 0.12 m |
+| Casera Pieltinis | 0.11 m | 0.11 m | 0.14 m | 0.19 m | 0.26 m | 0.17 / 0.33 m |
+
+What the table shows (RMSE of the daily snow depth; GEOtop 3.0 moves the same way for every term):
+
+- **Horizon alone** shades the two valley stations, Sauris di sopra and Sauris di sotto, and keeps their snow
+  longer. Elsewhere it changes almost nothing.
+- **The sky view factor adds energy** (`horizon` against `shade`). The terrain that hides part of the sky is
+  at the temperature of the surface: it cuts the net longwave loss by 1–4 W m⁻² over the season, more than
+  it cuts the absorbed shortwave (0–2.4 W m⁻²). The snow melts out 4–7 days earlier.
+- **The slope of the map cell** delays the melt on the NNE slope (Chiansaveit, +8 days) and advances it on the
+  southern ones (−6 to −9 days).
+- **On this season the flat column is the closest to the measurements** at three stations of four. The stakes
+  stand on flat fields, while slope and V describe a 250 m cell.
+
+How the geometry of a station should be described is a choice for the plan of operational runs: the flat
+field with or without its horizon, or the cell of the DEM.
 
 ## To run your own station
 

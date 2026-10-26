@@ -67,6 +67,25 @@ public class SurfaceEnergyBalanceTest {
 	}
 
 	@Test
+	public void skyViewFactorScalesTheEmission() {
+		// GEOtop: LWnet = eps (LWin - V sigma Ts^4), dEB/dTs = -4 eps V sigma Ts^3 - ...
+		double v = 0.78;
+		SurfaceForcing open = new SurfaceForcing(300, 100, 0.4, 250, -5 + TM, 0.7, 2, P);
+		SurfaceForcing sloped = new SurfaceForcing(300, 100, 0.4, 250, -5 + TM, 0.7, 2, P, v);
+		SnowAlbedo.Albedos albedos = ALBEDO.albedos(0.5, 1.5, 0.4, 0.2, 0.3);
+		SurfaceEnergyBalance.Parameters parameters = SurfaceEnergyBalance.Parameters.geotop();
+		double ts = -7 + TM;
+		SurfaceFluxes f1 = SurfaceEnergyBalance.atStartOfStep(parameters, GEOTOP_TURBULENCE, open, albedos, -8 + TM)
+				.evaluate(ts);
+		SurfaceFluxes fv = SurfaceEnergyBalance.atStartOfStep(parameters, GEOTOP_TURBULENCE, sloped, albedos, -8 + TM)
+				.evaluate(ts);
+		double emission = 0.98 * AirProperties.emissivePower(ts);
+		assertEquals(f1.netLongwave() + (1 - v) * emission, fv.netLongwave(), 1e-10);
+		assertEquals(f1.sensibleHeat(), fv.sensibleHeat(), 0.0);
+		assertEquals(f1.derivative() + (1 - v) * 0.98 * AirProperties.dEmissivePower(ts), fv.derivative(), 1e-12);
+	}
+
+	@Test
 	public void reproducesGeotopAboveMelting() {
 		// iterate at +0.5 degC (from -0.5): lambda = Levap(0.5), condensation (E < 0)
 		SurfaceEnergyBalance eb = balance(SurfaceEnergyBalance.Parameters.geotop(), GEOTOP_TURBULENCE, 3, 0.9, 3, 300,

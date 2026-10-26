@@ -1,0 +1,175 @@
+/*
+ * Friuli case on the terrain of the stations (phase 0 of the plan for
+ * operational runs): the same column, configuration and soil as
+ * snowsoil_friuli.sim, with the shortwave on the slope, the incoming longwave,
+ * rain and snow per unit area of the slope computed as GEOtop 3.0 does
+ * (make_topography.py, GeotopForcingFiles), and the sky view factor of the
+ * station in the column's longwave emission and terrain reflection.
+ *
+ * -Dvariant=flat | horizon | shade | slope | topography (default topography), as the
+ * GEOtop 3.0 runs: what each changes is in make_topography.py. -Dstation=1..4.
+ * Run with run_topography.sh, which writes the forcing first. Outputs in
+ * output/topography/<variant>/station_<n>/run/.
+ */
+import oms3.SimBuilder as OMS3
+
+def station = (System.getProperty("station") ?: "1") as int
+def variant = System.getProperty("variant") ?: "topography"
+def terrain = (variant == "horizon" || variant == "topography")
+// latitude, longitude, elevation of the stations (one line each: the OMS preprocessor reads def lines one by one)
+def latitude  = [1: 46.4518, 2: 46.46722, 3: 46.4662, 4: 46.48414][station]
+def longitude = [1: 12.62653, 2: 12.68198, 3: 12.71044, 4: 12.72301][station]
+def elevation = [1: 1710.0, 2: 1414.0, 3: 1200.0, 4: 1742.0][station]
+// sky view factor of the map cell of the station (data/geometry.csv), with the horizon
+def skyView = terrain ? [1: 0.78, 2: 0.83, 3: 0.78, 4: 0.87][station] : 1.0
+
+def startDate = "2025-11-01 01:00"
+def endDate   = "2026-05-01 00:00"
+def timestep  = 60
+def data = "$oms_prj/data"
+def forcing = "$oms_prj/output/topography/${variant}/station_${station}"
+
+new OMS3().sim(name: "snowsoil_friuli_${variant}_${station}") {
+
+    model(while: "reader_airT.doProcess") {
+
+        components {
+            "reader_airT"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_rh"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_wind"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_p"     "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_rain"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_snow"  "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_swb"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_swd"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_cos"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_lw"    "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "reader_tau"   "org.hortonmachine.gears.io.timedependent.OmsTimeSeriesIteratorReader"
+            "snowsoil"     "org.geoframe.whetgeo1d.solvers.SnowSoilSolver1DMain"
+        }
+
+        parameter {
+            "reader_airT.file"         "${data}/airTemperature.csv"
+            "reader_airT.idfield"      "ID"
+            "reader_airT.tStart"       "${startDate}"
+            "reader_airT.tEnd"         "${endDate}"
+            "reader_airT.tTimestep"    "${timestep}"
+            "reader_airT.fileNovalue"  "-9999.0"
+
+            "reader_rh.file"           "${data}/relativeHumidity.csv"
+            "reader_rh.idfield"        "ID"
+            "reader_rh.tStart"         "${startDate}"
+            "reader_rh.tEnd"           "${endDate}"
+            "reader_rh.tTimestep"      "${timestep}"
+            "reader_rh.fileNovalue"    "-9999.0"
+
+            "reader_wind.file"         "${data}/windSpeed.csv"
+            "reader_wind.idfield"      "ID"
+            "reader_wind.tStart"       "${startDate}"
+            "reader_wind.tEnd"         "${endDate}"
+            "reader_wind.tTimestep"    "${timestep}"
+            "reader_wind.fileNovalue"  "-9999.0"
+
+            "reader_p.file"            "${data}/pressure.csv"
+            "reader_p.idfield"         "ID"
+            "reader_p.tStart"          "${startDate}"
+            "reader_p.tEnd"            "${endDate}"
+            "reader_p.tTimestep"       "${timestep}"
+            "reader_p.fileNovalue"     "-9999.0"
+
+            "reader_rain.file"   "${forcing}/rainfall.csv"
+            "reader_rain.idfield""ID"
+            "reader_rain.tStart" "${startDate}"
+            "reader_rain.tEnd"   "${endDate}"
+            "reader_rain.tTimestep""${timestep}"
+            "reader_rain.fileNovalue""-9999.0"
+
+            "reader_snow.file"   "${forcing}/snowfall.csv"
+            "reader_snow.idfield""ID"
+            "reader_snow.tStart" "${startDate}"
+            "reader_snow.tEnd"   "${endDate}"
+            "reader_snow.tTimestep""${timestep}"
+            "reader_snow.fileNovalue""-9999.0"
+
+            "reader_swb.file"    "${forcing}/shortwaveDirect.csv"
+            "reader_swb.idfield" "ID"
+            "reader_swb.tStart"  "${startDate}"
+            "reader_swb.tEnd"    "${endDate}"
+            "reader_swb.tTimestep""${timestep}"
+            "reader_swb.fileNovalue""-9999.0"
+
+            "reader_swd.file"    "${forcing}/shortwaveDiffuse.csv"
+            "reader_swd.idfield" "ID"
+            "reader_swd.tStart"  "${startDate}"
+            "reader_swd.tEnd"    "${endDate}"
+            "reader_swd.tTimestep""${timestep}"
+            "reader_swd.fileNovalue""-9999.0"
+
+            "reader_cos.file"    "${forcing}/cosIncidence.csv"
+            "reader_cos.idfield" "ID"
+            "reader_cos.tStart"  "${startDate}"
+            "reader_cos.tEnd"    "${endDate}"
+            "reader_cos.tTimestep""${timestep}"
+            "reader_cos.fileNovalue""-9999.0"
+
+            "reader_lw.file"     "${forcing}/longwaveIn.csv"
+            "reader_lw.idfield"  "ID"
+            "reader_lw.tStart"   "${startDate}"
+            "reader_lw.tEnd"     "${endDate}"
+            "reader_lw.tTimestep""${timestep}"
+            "reader_lw.fileNovalue""-9999.0"
+
+            "reader_tau.file"          "${data}/cloudTransmissivity.csv"
+            "reader_tau.idfield"       "ID"
+            "reader_tau.tStart"        "${startDate}"
+            "reader_tau.tEnd"          "${endDate}"
+            "reader_tau.tTimestep"     "${timestep}"
+            "reader_tau.fileNovalue"   "-9999.0"
+
+            // configuration (ARCH-6): the plan runs Friuli in the recommended configuration
+            "snowsoil.configuration"          "recommended"
+            "snowsoil.soilWaterMode"          "Fixed"
+            "snowsoil.windHeight"             5.0
+            "snowsoil.temperatureHeight"      2.0
+
+            // site
+            "snowsoil.stationID"              station
+            "snowsoil.latitude"               latitude
+            "snowsoil.longitude"              longitude
+            "snowsoil.standardTime"           0.0
+            "snowsoil.elevation"              elevation
+            "snowsoil.skyViewFactor"          skyView
+            "snowsoil.tTimeStep"              3600.0
+
+            // longwave as LWinParameterization = 7 of the GEOtop runs (given: make_topography.py)
+            "snowsoil.clearSkyEmissivity"     "Konzelmann 1994"
+
+            // soil grid: GEOtop's three layers, WHETGEO-1D CSV inputs
+            "snowsoil.soilGridFile"           "$oms_prj/grid"
+
+            // boundary conditions (COL-6): bare soil by bulk transfer, no flux at the bottom
+            "snowsoil.bareSoilTopType"        "Bulk Transfer"
+            "snowsoil.bareSoilTransfer"       10.0
+            "snowsoil.bottomBCType"           "Bottom No Gradient"
+
+            // run header and outputs
+            "snowsoil.inputFiles"             "${data}/airTemperature.csv,${data}/relativeHumidity.csv,${data}/windSpeed.csv,${data}/pressure.csv,${data}/cloudTransmissivity.csv,${forcing}/rainfall.csv,${forcing}/snowfall.csv,${forcing}/shortwaveDirect.csv,${forcing}/shortwaveDiffuse.csv,${forcing}/cosIncidence.csv,${forcing}/longwaveIn.csv"
+            "snowsoil.outputPath"             "${forcing}/run"
+        }
+
+        connect {
+            "reader_airT.outData"   "snowsoil.inAirTemperature"
+            "reader_rh.outData"     "snowsoil.inRelativeHumidity"
+            "reader_wind.outData"   "snowsoil.inWindSpeed"
+            "reader_p.outData"      "snowsoil.inPressure"
+            "reader_rain.outData"   "snowsoil.inRainfall"
+            "reader_snow.outData"   "snowsoil.inSnowfall"
+            "reader_swb.outData"    "snowsoil.inShortwaveDirect"
+            "reader_swd.outData"    "snowsoil.inShortwaveDiffuse"
+            "reader_cos.outData"    "snowsoil.inCosIncidence"
+            "reader_lw.outData"     "snowsoil.inLongwaveIn"
+            "reader_tau.outData"    "snowsoil.inCloudTransmissivity"
+            "reader_airT.tCurrent"  "snowsoil.inCurrentDate"
+        }
+    }
+}

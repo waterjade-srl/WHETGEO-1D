@@ -33,9 +33,22 @@ package org.geoframe.whetgeo1d.snow.surface;
  * @param relativeHumidity RH, over water, in [0, 1]
  * @param windSpeed        wind speed at the measurement height [m s-1]
  * @param pressure         P [Pa]
+ * @param skyViewFactor    V, the fraction of the sky the surface sees, in
+ *                         (0, 1]: the surface emits ε V σ T⁴ to the sky, the
+ *                         rest being exchanged with terrain at its own
+ *                         temperature, as GEOtop ({@code energy.balance.cc:2466},
+ *                         {@code sky}); 1 on flat ground
  */
 public record SurfaceForcing(double shortwaveDirect, double shortwaveDiffuse, double cosIncidence,
-		double longwaveIn, double airTemperature, double relativeHumidity, double windSpeed, double pressure) {
+		double longwaveIn, double airTemperature, double relativeHumidity, double windSpeed, double pressure,
+		double skyViewFactor) {
+
+	/** On flat ground, V = 1. */
+	public SurfaceForcing(double shortwaveDirect, double shortwaveDiffuse, double cosIncidence, double longwaveIn,
+			double airTemperature, double relativeHumidity, double windSpeed, double pressure) {
+		this(shortwaveDirect, shortwaveDiffuse, cosIncidence, longwaveIn, airTemperature, relativeHumidity,
+				windSpeed, pressure, 1.0);
+	}
 
 	public SurfaceForcing {
 		requireNonNegative(shortwaveDirect, "shortwaveDirect");
@@ -53,6 +66,9 @@ public record SurfaceForcing(double shortwaveDirect, double shortwaveDiffuse, do
 		}
 		if (!(pressure > 0.0) || Double.isInfinite(pressure)) {
 			throw new IllegalArgumentException("pressure must be positive (Pa) and finite, got " + pressure);
+		}
+		if (!(skyViewFactor > 0.0 && skyViewFactor <= 1.0)) {
+			throw new IllegalArgumentException("skyViewFactor must be in (0, 1], got " + skyViewFactor);
 		}
 	}
 

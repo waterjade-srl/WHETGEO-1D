@@ -33,7 +33,7 @@ import org.geoframe.whetgeo1d.snow.surface.VapourPhase;
  * {@code energy.balance.cc:2449-2504}, commit 1f1fc5af):
  *
  * <pre>
- * G(T) = SW_net + ε (LW_in - σ T⁴) - H(T) - λ(T) E
+ * G(T) = SW_net + ε (LW_in - V σ T⁴) - H(T) - λ(T) E
  * SW_net = SW_b (1 - (α_vis + α_nir)/2) + SW_d (1 - (α_vis + α_nir)/2)
  * H(T) = ρ c_p (T - T_a) / min(r_h, 2600)
  * </pre>
@@ -147,12 +147,13 @@ public record BareSoilEnergyBalance(MoninObukhov turbulence, double emissivity, 
 			double density = AirProperties.density(mean, forcing.airHumidity(), forcing.pressure());
 			double conductance = density * AirProperties.specificHeat(mean) / resistances.heatFlux();
 			double sensible = conductance * (temperature - ta);
+			double sky = forcing.skyViewFactor();
 			double netLongwave = soil.emissivity()
-					* (forcing.longwaveIn() - AirProperties.emissivePower(temperature));
+					* (forcing.longwaveIn() - sky * AirProperties.emissivePower(temperature));
 			double latentHeat = VapourPhase.at(temperature).latentHeat(temperature);
 			double latent = latentHeat * evaporation;
 			double balance = netShortwave + netLongwave - sensible - latent;
-			double derivative = -soil.emissivity() * AirProperties.dEmissivePower(temperature) - conductance;
+			double derivative = -soil.emissivity() * sky * AirProperties.dEmissivePower(temperature) - conductance;
 			return new SurfaceFluxes(netShortwave, netLongwave, sensible, latent, evaporation, latentHeat, balance,
 					derivative);
 		}
