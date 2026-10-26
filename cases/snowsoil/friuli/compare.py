@@ -7,8 +7,8 @@ Used by friuli_comparison.ipynb; also runnable as a script:
     python3 compare.py [geotop3_folder] [mobygis_output_tabs]
 
 geotop3_folder: the gt3/ folder written by converti.py and run.sh of the case folder
-(casi/Friuli/gt3, outside this repository), with piano/, orizzonte/, pendenza/ and topografia/ inside
-(flat, horizon and sky view factor only, slope and aspect only, all); mobygis_output_tabs:
+(casi/Friuli/gt3, outside this repository), with piano/, ombra/, orizzonte_v/, pendenza/ and topografia_v/
+inside (flat; horizon only; horizon and its sky view factor; slope and aspect only; all); mobygis_output_tabs:
 output_tabs/ of pysnow/tests/gt_sim1D. Missing folders are skipped. Environment variables
 FRIULI_GT3 and FRIULI_MOBYGIS do the same. The porting on the terrain of the stations
 (run_topography.sh) is read from output/topography/<variant>/station_<n>/run/.
@@ -31,8 +31,10 @@ DEFAULT_GT3 = os.path.expanduser("~/WORK/COMMESSE/2026_RigonianLab/work/geo2geo/
 DEFAULT_MOBYGIS = os.path.expanduser("~/git/geotop_moby/pysnow/tests/gt_sim1D/output_tabs")
 SNOW = 0.05  # snow on the ground: daily mean HS at least 5 cm [m]
 # terrain variants: name in the porting, name of the GEOtop 3.0 folder
-TERRAIN = {"flat": "piano", "horizon": "orizzonte", "shade": "ombra", "slope": "pendenza",
-           "topography": "topografia"}
+# (horizon and topography: GEOtop with the sky view factor from the point horizon, as the port; the map's is not
+# consistent with the horizons)
+TERRAIN = {"flat": "piano", "horizon": "orizzonte_v", "shade": "ombra", "slope": "pendenza",
+           "topography": "topografia_v"}
 
 
 def read_oms(path):

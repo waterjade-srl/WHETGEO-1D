@@ -34,6 +34,8 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.Horizon;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SlopeShortwave;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
+import org.geoframe.whetgeo1d.core.utils.EnumUtils;
+import org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage;
 import org.geotools.api.feature.simple.SimpleFeature;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
@@ -123,6 +125,13 @@ public class TerrainShortwaveMain extends HMModel {
 	@Description("Field of the elevation [m], for the pressure where it is missing; empty: the parameter elevation.")
 	@In
 	public String fStationsElevation = "";
+
+	@Description("Case GeoPackage (CaseGeoPackage): the geometry and horizon of each station from its points and horizon tables, the station ID being the point id; in place of inStations and horizonFile.")
+	@In
+	public String caseFile = "";
+	@Description("With caseFile: cell (slope, aspect, horizon and sky view factor of the point), field (its horizon, slope 0, V = 1) or flat.")
+	@In
+	public String siteGeometry = "cell";
 
 	@Description("Horizon of the stations, OMS table: azimuth [deg] and one value_<id> column [deg] per station; empty: flat.")
 	@In
@@ -254,6 +263,9 @@ public class TerrainShortwaveMain extends HMModel {
 	}
 
 	private Station station(int id) throws IOException {
+		if (caseFile != null && !caseFile.isBlank()) {
+			return caseStation(id);
+		}
 		double lat = latitude;
 		double lon = longitude;
 		double z = elevation;
@@ -279,6 +291,22 @@ public class TerrainShortwaveMain extends HMModel {
 		return new Station(site,
 				new SlopeShortwave(site, clearSky, Math.toRadians(beta), Math.toRadians(psi), v, horizon),
 				new CloudTransmissivity(site, clearSky, 1.0, 0.0), z, v);
+	}
+
+	private Station caseStation(int id) {
+		CaseGeoPackage file = new CaseGeoPackage(Path.of(caseFile));
+		CaseGeoPackage.Point p = file.point(id);
+		SnowSoilSolver1DMain.SiteGeometry g = EnumUtils.fromString(SnowSoilSolver1DMain.SiteGeometry.class,
+				siteGeometry);
+		boolean cell = g == SnowSoilSolver1DMain.SiteGeometry.CELL;
+		double v = cell ? file.skyViewFactor(p) : 1.0;
+		Horizon horizon = g == SnowSoilSolver1DMain.SiteGeometry.FLAT ? Horizon.flat() : file.horizon(id);
+		SolarGeometry site = SolarGeometry.ofDegrees(p.latitude(), p.longitude(), standardTime);
+		ClearSkyTransmissivity clearSky = ClearSkyTransmissivity.geotop();
+		return new Station(site,
+				new SlopeShortwave(site, clearSky, Math.toRadians(cell ? p.slope() : 0.0),
+						Math.toRadians(cell ? p.aspect() : 0.0), v, horizon),
+				new CloudTransmissivity(site, clearSky, 1.0, 0.0), p.elevation(), v);
 	}
 
 	private SimpleFeature feature(int id) {

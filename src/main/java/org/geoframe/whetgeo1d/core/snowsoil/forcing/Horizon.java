@@ -158,4 +158,34 @@ public record Horizon(double[] azimuth, double[] height) {
 	public boolean inShadow(double solarHeight, double solarAzimuth, double mountainTolerance, double flatTolerance) {
 		return solarHeight < flatTolerance || solarHeight < heightAt(solarAzimuth) + mountainTolerance;
 	}
+
+	/**
+	 * Sky view factor of a slope under this horizon, Dozier and Frew (1990):
+	 *
+	 * <pre>
+	 * V = 1/2π ∫ [cos β sin² H + sin β cos(φ - A) (H - sin H cos H)] dφ
+	 * </pre>
+	 *
+	 * with H(φ) the zenith angle of the horizon, no lower than the slope's own
+	 * plane, tan h = -tan β cos(φ - A); midpoint rule on 3600 directions, the
+	 * horizon interpolated as by {@link #heightAt}.
+	 *
+	 * @param slope  β [deg]
+	 * @param aspect A [deg], from north clockwise
+	 */
+	public double skyViewFactor(double slope, double aspect) {
+		int n = 3600;
+		double b = Math.toRadians(slope);
+		double a = Math.toRadians(aspect);
+		double sum = 0.0;
+		for (int k = 0; k < n; k++) {
+			double phiDeg = (k + 0.5) * 360.0 / n;
+			double phi = Math.toRadians(phiDeg);
+			double plane = Math.atan(-Math.tan(b) * Math.cos(phi - a));
+			double zenith = 0.5 * Math.PI - Math.max(Math.toRadians(heightAt(phiDeg)), plane);
+			double s = Math.sin(zenith);
+			sum += Math.cos(b) * s * s + Math.sin(b) * Math.cos(phi - a) * (zenith - s * Math.cos(zenith));
+		}
+		return sum / n;
+	}
 }

@@ -129,77 +129,74 @@ pack two weeks early and stay 0.2–0.5 m low from March. NivoGEO-1D, with the s
 end of the season (RMSE 0.09 m with the terrain, 0.16 m flat), so undercatch at the stake alone does not
 explain it: part of the gap is in the energy balance.
 
-## On the terrain of the stations
+## On the terrain of the stations (the default)
 
-`run_topography.sh` runs the same column with the radiation of the station's terrain, in five variants:
+`snowsoil_friuli_terrain.sim` with `run_terrain.sh` is the operational run. It uses GEOframe inputs only and
+reads no GEOtop file. Each station is on its terrain: slope, aspect, horizon, and a sky view factor V computed
+from them.
 
-| Variant | Slope and aspect | Horizon | Sky view factor V |
+**Static inputs: one GeoPackage, `data/friuli.gpkg`** (`make_case.py`). The time series stay in `data/*.csv`.
+
+| Layer or table | Content |
+|---|---|
+| `points` (POINT, EPSG:3035) | id, name, elevation, lat, lon, slope and aspect of the 250 m map cell, `svf` from the horizon and the slope, `svf_map` (the map's, not used), `site_type`, `wind_height`, `temperature_height` |
+| `horizon` | point_id, azimuth, height: 16 directions, every 22.5° |
+| `soil_layers`, `soil_parameters`, `soil_parameter_types`, `initial_condition` | WHETGEO-1D's soil inputs (the columns of the CSV files of `grid/`), by `profile_id` and `ic_id` |
+| `columns` | id, point_id, profile_id, ic_id: one row per 1D run |
+| `provenance` | sources, their SHA-256, the script |
+
+- `-Dcolumn=n` picks the row of `columns`. The column (`caseFile`, `caseColumn`) takes from it its station ID,
+  site, sensor heights, slope, V and soil.
+- `TerrainShortwaveMain` (`caseFile`) takes geometry and horizon of every station from the same file and
+  computes the shortwave on the terrain upstream of the column.
+- GDAL and QGIS read the file as a standard GeoPackage. GEOframe's `OmsVectorReader` reads the layer of points
+  (`friuli.gpkg#points`) but not the attribute tables, which the components read with SQL.
+
+**The map's sky view factor is not used.** The 250 m map gives V = 0.78–0.87 at the stations. The point
+horizons of the same source give 0.85–0.98 (Dozier and Frew 1990, on the slope).
+
+`-Dgeometry=flat` and `-Dgeometry=field` (a flat field under its horizon) are for internal checks only.
+
+Daily snow depth against the stake, operational run (`cell`):
+
+| Station | RMSE | Melt-out, run / measured | Flat column (`flat`) |
 |---|---|---|---|
-| `flat` | 0 | flat | 1 |
-| `shade` | 0 | of the point | 1 |
-| `horizon` | 0 | of the point | of the map cell |
-| `slope` | of the map cell | flat | 1 |
-| `topography` | of the map cell | of the point | of the map cell |
+| Chiansaveit (20° NNE) | 0.23 m | 24/04 / 02/05 | 0.29 m |
+| Sauris di sopra (0°) | 0.11 m | 06/04 / 02/04 | 0.07 m |
+| Sauris di sotto (11° SSW) | 0.08 m | 13/03 / 27/03 | 0.04 m |
+| Casera Pieltinis (12° SSE) | 0.20 m | 06/04 / 16/04 | 0.11 m |
 
-Slope, aspect and V come from the 250 m maps of the source run at the station (`data/geometry.csv`): 20° NNE,
-0°, 11° SSW and 12° SSE, V = 0.78, 0.83, 0.78, 0.87. The horizon is the point horizon of the source.
+**Checks.**
+- `flat` from the GeoPackage gives, bit for bit, the data it gave from a shapefile and the CSV soil inputs.
+- Given the same pressure, the shortwave is the one that GEOtop 3.0's computation (`run_topography.sh`, below)
+  gives for the same geometry.
+- 16 directions instead of the source's 72 move V by at most 0.005 and the snow depth RMSE by at most 0.012 m.
 
-- **Forcing** (`make_topography.py`): GEOtop 3.0's own computation, through `GeotopForcingFiles` of the
-  fidelity package on a GEOtop meteo file written from `data/`. The clear-sky shortwave times τ_c is split
-  with Erbs; the beam is projected on the slope and hidden by the horizon; the diffuse is multiplied by V.
-  The sky longwave is V ε_a σ T_a⁴. Rain and snow are counted per unit area of the slope, P cos β.
-- **Column** (`snowsoil_friuli_topography.sim`): `skyViewFactor` = V. The surface emits V ε σ T_s⁴ to the
-  sky, and (1 − V) of the shortwave it reflected in the previous step returns as diffuse, as GEOtop does
-  with `Surroundings = 0`.
+## What each terrain term does (internal test)
 
-The `flat` variant reproduces `snowsoil_friuli.sim` within 0.001 m of RMSE.
+`run_topography.sh` runs the column with GEOtop 3.0's own terrain radiation (`make_topography.py`, through
+`GeotopForcingFiles` of the fidelity package), one term at a time, next to GEOtop 3.0 with the same geometry
+(`casi/Friuli`, outside this repository). Settings:
 
-| Station | flat | shade | horizon | slope | topography | GEOtop 3.0 flat / topography |
+- V from the 72-direction point horizon: flat in `horizon`, on the slope in `topography`;
+- rain and snow per unit area of the slope;
+- `python3 compare.py --terrain` for the table.
+
+| Station | flat | shade (horizon, V = 1) | horizon (with its V) | slope | topography | GEOtop 3.0 flat / topography |
 |---|---|---|---|---|---|---|
-| Chiansaveit | 0.29 m | 0.29 m | 0.39 m | 0.19 m | 0.25 m | 0.40 / 0.32 m |
-| Sauris di sopra | 0.07 m | 0.11 m | 0.10 m | 0.07 m | 0.10 m | 0.13 / 0.11 m |
-| Sauris di sotto | 0.04 m | 0.09 m | 0.07 m | 0.09 m | 0.08 m | 0.09 / 0.12 m |
-| Casera Pieltinis | 0.11 m | 0.11 m | 0.14 m | 0.19 m | 0.26 m | 0.17 / 0.33 m |
+| Chiansaveit | 0.29 m | 0.29 m | 0.32 m | 0.19 m | 0.23 m | 0.40 / 0.29 m |
+| Sauris di sopra | 0.07 m | 0.11 m | 0.11 m | 0.07 m | 0.11 m | 0.13 / 0.10 m |
+| Sauris di sotto | 0.04 m | 0.09 m | 0.08 m | 0.09 m | 0.07 m | 0.09 / 0.11 m |
+| Casera Pieltinis | 0.11 m | 0.11 m | 0.11 m | 0.19 m | 0.20 m | 0.17 / 0.31 m |
 
-What the table shows (RMSE of the daily snow depth; GEOtop 3.0 moves the same way for every term):
+Every term moves the port and GEOtop 3.0 the same way:
 
-- **Horizon alone** shades the two valley stations, Sauris di sopra and Sauris di sotto, and keeps their snow
-  longer. Elsewhere it changes almost nothing.
-- **The sky view factor adds energy** (`horizon` against `shade`). The terrain that hides part of the sky is
-  at the temperature of the surface: it cuts the net longwave loss by 1–4 W m⁻² over the season, more than
-  it cuts the absorbed shortwave (0–2.4 W m⁻²). The snow melts out 4–7 days earlier.
-- **The slope of the map cell** delays the melt on the NNE slope (Chiansaveit, +8 days) and advances it on the
-  southern ones (−6 to −9 days).
-- **On this season the flat column is the closest to the measurements** at three stations of four. The stakes
-  stand on flat fields, while slope and V describe a 250 m cell.
-
-How the geometry of a station should be described is a choice for the plan of operational runs: the flat
-field with or without its horizon, or the cell of the DEM.
-
-## As an operational run
-
-`snowsoil_friuli_terrain.sim` (with `run_terrain.sh`) runs the same stations from GEOframe inputs only, with no
-GEOtop file. `TerrainShortwaveMain` computes the shortwave on the terrain upstream of the column, from:
-
-- the station shapefile `data/stations.shp`: id, elevation, latitude and longitude, and the slope, aspect and
-  sky view factor (`svf`) of the map cell;
-- the horizon table `data/horizon.csv`;
-- the cloud transmissivity.
-
-`make_stations.py` writes both files from the source run. `-Dgeometry` chooses the description of the station:
-
-| Geometry | Slope and aspect | Horizon | V |
-|---|---|---|---|
-| `flat` | 0 | flat | 1 |
-| `field` (default) | 0 | of the point | 1 |
-| `cell` | of the map cell | of the point | of the map cell |
-
-`field` is a stake on a flat field under its horizon.
-
-**Check.** Given the same pressure, the shortwave of `flat`, `field` and `cell` is the same as `run_topography.sh`
-gives for `flat`, `shade` and `topography`, to the printed digits. The runs use the measured pressure, and in
-`cell` the compaction on the slope, so the snow depth differs from those runs by at most 13 mm in an hour;
-RMSE within 0.005 m, the same melt-out days.
+- **Slope of the map cell:** melt-out 8 days later on the NNE slope, 6–9 days earlier on the southern ones.
+- **Horizon:** keeps more snow at the two valley stations.
+- **Sky view factor, once consistent with the horizon:** small, ±1–2 days of melt-out.
+- **On the mean of the four stations** the full terrain leaves GEOtop 3.0 where it was (0.195 → 0.201 m) and
+  moves the port from 0.126 to 0.152 m. That is because the port's flat column was already unbiased at the
+  valley stations.
 
 ## To run your own station
 
@@ -210,9 +207,12 @@ RMSE within 0.005 m, the same melt-out days.
      shortwave, connect it to `inShortwaveGlobal`; τ_c is then computed from it.
    - Precipitation: total, or rain and snow already split (`inRainfall`, `inSnowfall`).
    - Optional: incoming longwave, if measured.
-2. **Describe the soil** in `grid/`: cells, initial temperature and suction, soil parameters.
-3. **Copy `snowsoil_friuli.sim`** and change the station coordinates, the elevation, the sensor heights
-   (`windHeight`, `temperatureHeight`), the dates and the rain/snow thresholds.
+2. **Describe the soil**: cells, initial temperature and suction, soil parameters (`grid/` as CSV, or in the
+   case GeoPackage).
+3. **Describe the station** in a case GeoPackage like `data/friuli.gpkg` (see `make_case.py`): point, horizon,
+   soil, a row in `columns`. Then copy `snowsoil_friuli_terrain.sim` and change the dates and the rain/snow
+   thresholds. Without a GeoPackage, `snowsoil_friuli.sim` takes coordinates, elevation and sensor heights
+   (`windHeight`, `temperatureHeight`) as parameters, on flat ground.
 4. **Start in autumn, without snow.** The column does not take an initial snowpack yet.
 
 The settings that are not written in the `.sim` take the defaults of the configuration. The user guide,

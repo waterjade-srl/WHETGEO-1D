@@ -72,6 +72,7 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.PrecipitationPartition;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.SolarGeometry;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.StandardAtmosphere;
 import org.geoframe.whetgeo1d.core.utils.EnumUtils;
+import org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage;
 import org.geoframe.whetgeo1d.io.snowsoil.OutputOptions;
 import org.geoframe.whetgeo1d.io.snowsoil.RunHeader;
 import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilCsvWriter;
@@ -411,6 +412,19 @@ public class SnowSoilSolver1DMain extends HMModel {
 	public double rainCorrection = 1.0;
 	@In
 	public double snowCorrection = 1.0;
+
+	/*
+	 * CASE: the static inputs of a column from the case GeoPackage
+	 */
+	@Description("Case GeoPackage (CaseGeoPackage): with caseColumn, the station ID, latitude, longitude, elevation, sensor heights, slope, sky view factor and soil grid of that column, in place of the parameters; empty: the parameters.")
+	@In
+	public String caseFile = "";
+	@Description("Column of the case GeoPackage (columns.id).")
+	@In
+	public int caseColumn = 0;
+	@Description("How the case point is described: cell (slope, aspect and sky view factor of the point), field (a stake on a flat field: slope 0, V = 1) or flat.")
+	@In
+	public String siteGeometry = "cell";
 
 	/*
 	 * SOIL GRID: either a file, or the arrays of WHETGEO-1D's grid readers
@@ -946,7 +960,12 @@ public class SnowSoilSolver1DMain extends HMModel {
 	private void setup() throws Exception {
 		Configuration config = EnumUtils.fromString(Configuration.class, configuration);
 		boolean fidelity = config == Configuration.FIDELITY;
-		SoilGridInputs grid = soilGridFile == null || soilGridFile.isBlank() ? null : SoilGridInputs.read(soilGridFile);
+		SoilGridInputs grid;
+		if (caseFile != null && !caseFile.isBlank()) {
+			grid = takeCase();
+		} else {
+			grid = soilGridFile == null || soilGridFile.isBlank() ? null : SoilGridInputs.read(soilGridFile);
+		}
 		if (grid != null) {
 			takeGrid(grid);
 		}
@@ -1082,6 +1101,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("longitude", Double.toString(longitude));
 		attributes.put("standardTime", Double.toString(standardTime));
 		attributes.put("elevation", Double.toString(elevation));
+		if (caseFile != null && !caseFile.isBlank()) {
+			attributes.put("caseColumn", Integer.toString(caseColumn));
+			attributes.put("siteGeometry", siteGeometry);
+		}
 		// terrain only when there is one: flat runs keep their header and restart label
 		if (slope != 0.0) {
 			attributes.put("slope", Double.toString(slope));
@@ -1255,8 +1278,46 @@ public class SnowSoilSolver1DMain extends HMModel {
 				p.precipitation(), p.surfaceCoupling(), p.thinSnow(), p.skin(), p.shortwavePenetration());
 	}
 
+	/**
+	 * The column {@link #caseColumn} of {@link #caseFile}: its station ID, site,
+	 * sensors and terrain go to the parameters, its soil grid is returned.
+	 */
+	private SoilGridInputs takeCase() throws Exception {
+		CaseGeoPackage file = new CaseGeoPackage(Path.of(caseFile));
+		CaseGeoPackage.Column column = file.column(caseColumn);
+		CaseGeoPackage.Point point = file.point(column.pointId());
+		stationID = point.id();
+		latitude = point.latitude();
+		longitude = point.longitude();
+		elevation = point.elevation();
+		windHeight = point.windHeight();
+		temperatureHeight = point.temperatureHeight();
+		boolean cell = EnumUtils.fromString(SiteGeometry.class, siteGeometry) == SiteGeometry.CELL;
+		slope = cell ? point.slope() : 0.0;
+		skyViewFactor = cell ? file.skyViewFactor(point) : 1.0;
+		Path folder = file.soilGridFolder(column);
+		try {
+			return SoilGridInputs.read(folder.toString());
+		} finally {
+			CaseGeoPackage.delete(folder);
+		}
+	}
+
+	/** How a point of a case is described. */
+	public enum SiteGeometry {
+		/** Slope, aspect, horizon and sky view factor of the point. */
+		CELL,
+		/** A stake on a flat field: its horizon, slope 0, V = 1. */
+		FIELD,
+		/** No slope, no horizon, V = 1. */
+		FLAT
+	}
+
 	private List<String> inputFileList() {
 		List<String> files = new ArrayList<>();
+		if (caseFile != null && !caseFile.isBlank()) {
+			files.add(caseFile);
+		}
 		if (soilGridFile != null && !soilGridFile.isBlank() && Files.isRegularFile(Path.of(soilGridFile))) {
 			files.add(soilGridFile);
 		} else if (soilGridFile != null && !soilGridFile.isBlank() && Files.isDirectory(Path.of(soilGridFile))) {

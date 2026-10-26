@@ -13,12 +13,12 @@ back (1 - V) of the shortwave it reflected in the previous step.
 Variants, as the GEOtop 3.0 runs of the same stations:
 
     flat        slope 0, no horizon, V = 1 (the same forcing as the flat case, through the same path)
-    horizon     horizon and V of the point, slope 0
+    horizon     horizon of the point and its V (from the horizon, on flat ground), slope 0
     shade       horizon of the point only: slope 0, V = 1
     slope       slope and aspect of the point, no horizon, V = 1
-    topography  all of them
+    topography  all of them, V from the horizon on the slope
 
-Slope, aspect and V are those of the 250 m map cell of the station, the horizon that of the point, both
+Slope and aspect are those of the 250 m map cell of the station, the horizon that of the point, both
 from the MobyGIS-GEOtop point run `pysnow/tests/gt_sim1D` (repository geotop_moby), as in make_inputs.py.
 
 Writes, next to this script:
@@ -35,6 +35,8 @@ import csv
 import os
 import subprocess
 import sys
+
+import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIONS = {  # id: latitude, longitude, elevation [m], map coordinates (EPSG:3035) of the station
@@ -86,8 +88,35 @@ def sample(grid, x, y):
     return rows[r][c]
 
 
+def periodic(azimuth, height, at):
+    """Horizon height at the azimuths `at`, linear between the given ones, across north."""
+    a = np.concatenate([azimuth - 360.0, azimuth, azimuth + 360.0])
+    return np.interp(at, a, np.concatenate([height, height, height]))
+
+
+def sky_view_factor(azimuth, height, slope, aspect, n=3600):
+    """Dozier and Frew (1990): V = 1/2pi int [cos b sin^2 H + sin b cos(phi - A)(H - sin H cos H)] dphi, with H the
+    zenith angle of the horizon, no lower than the slope's own plane (as Horizon.skyViewFactor in Java)."""
+    phi = np.radians((np.arange(n) + 0.5) * 360.0 / n)
+    h = np.radians(periodic(np.asarray(azimuth, float), np.asarray(height, float), np.degrees(phi)))
+    b, a = np.radians(slope), np.radians(aspect)
+    plane = np.arctan(-np.tan(b) * np.cos(phi - a))
+    zenith = 0.5 * np.pi - np.maximum(h, plane)
+    return float(np.mean(np.cos(b) * np.sin(zenith) ** 2
+                         + np.sin(b) * np.cos(phi - a) * (zenith - np.sin(zenith) * np.cos(zenith))))
+
+
+def point_horizon(source, s):
+    """Azimuths and heights [deg] of the point horizon of station s in the source."""
+    with open(os.path.join(source, "horizon_point", f"horizon{s:04d}.txt")) as f:
+        rows = list(csv.DictReader(f))
+    return np.array([float(r["azimuth"]) for r in rows]), np.array([float(r["horizon_height"]) for r in rows])
+
+
 def geometry(source):
-    """Slope, aspect and V of the map cell of each station (the points of ListPoints.txt)."""
+    """Slope, aspect and V of the map cell of each station (the points of ListPoints.txt). The V of the map is not
+    consistent with the point horizons (0.78-0.87 against 0.85-0.98 from the horizons): it is kept for
+    traceability only, the runs take V from the horizon (sky_view_factor)."""
     maps = {n: read_grid(os.path.join(source, "input_maps", f"{n}_250m3035.asc")) for n in ("slp", "asp", "svf")}
     with open(os.path.join(source, "ListPoints.txt")) as f:
         points = {int(float(r["st_id"])): (float(r["x"]), float(r["y"])) for r in csv.DictReader(f)}
@@ -99,13 +128,18 @@ def main():
     source = sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser("~/git/geotop_moby/pysnow/tests/gt_sim1D")
     geo = geometry(source)
     with open(os.path.join(HERE, "data", "geometry.csv"), "w") as f:
-        f.write("id,slope,aspect,skyViewFactor\n")
+        f.write("id,slope,aspect,skyViewFactor,skyViewFactorFlat,skyViewFactorMap\n")
         for s, (slope, aspect, sky) in geo.items():
-            f.write(f"{s},{slope:g},{aspect:g},{sky:.4f}\n")
+            az, h = point_horizon(source, s)
+            f.write(f"{s},{slope:g},{aspect:g},{sky_view_factor(az, h, slope, aspect):.4f},"
+                    f"{sky_view_factor(az, h, 0.0, 0.0):.4f},{sky:.4f}\n")
     series = {n: read_oms(os.path.join(HERE, "data", n + ".csv")) for n in SERIES}
     for variant, (with_horizon, with_sky, with_slope) in VARIANTS.items():
         for s, (lat, lon, z) in STATIONS.items():
-            slope, aspect, sky = geo[s]
+            slope, aspect, _ = geo[s]
+            az, h = point_horizon(source, s)
+            # V from the horizon, on the slope where the variant has one
+            sky = sky_view_factor(az, h, slope, aspect) if with_slope else sky_view_factor(az, h, 0.0, 0.0)
             folder = os.path.join(HERE, "output", "topography", variant, f"station_{s}")
             os.makedirs(folder, exist_ok=True)
             # GEOtop's meteo file: the OMS records, UTC, each the hour that ends at its date (GEOtop's

@@ -189,12 +189,18 @@ The column runs in a `.sim` next to GEOframe components; what has been tried so 
   - The column gives GEOET the net radiation and the heat flux into the soil of the bare soil, through a `feedback` connection (the previous step): `outBareSoilNetRadiation`, `outSoilHeatFlux`, GEOframe series keyed by `stationID`, −9999 under snow.
   - GEOET has to be compiled against this project's GeoTools 34; `run_geoet.sh` does it with three renamed imports.
   - GEOET is hourly only: its Penman–Monteith coefficient is right only for steps of exactly 3600 s.
-- **Shortwave on the terrain of a station (LINK-1, LINK-4): `TerrainShortwaveMain`**, in this project, upstream of the column. Example: `friuli/snowsoil_friuli_terrain.sim` and `run_terrain.sh`.
-  - Inputs, GEOframe only: station shapefile (`OmsShapefileFeatureReader`: id, slope, aspect, sky view factor, and optionally latitude, longitude, elevation), horizon table (`azimuth` and one `value_<id>` column per station, NivoGEO-1D's format), air temperature, humidity, pressure, and the cloud transmissivity or the measured global shortwave on the horizontal.
-  - What it computes, as GEOtop 3.0 for a point: Iqbal's clear sky times τ_c, split with Erbs; the beam on the slope with the longitude in the solar hour, zero in the shadow of the horizon; the diffuse times V; the cosine of the snow albedo. It gives `outShortwaveDirect`, `outShortwaveDiffuse`, `outCosIncidence` and `outCloudTransmissivity` to the column's inputs of the same name.
-  - With a measured global shortwave and the sun too low for a τ_c, the measurement goes to the diffuse. GEOtop instead takes the clear sky times its daily τ_c there, so the season's diffuse differs by about 3 % on Matsch_P2_Ref_007; the beam is the same.
-  - The column's `slope` and `skyViewFactor` must be the station's: the precipitation per unit area of the slope (P cos β), the compaction on the slope, the emission to the sky and the reflection from the terrain.
-  - A field name left empty takes the component's scalar parameter: `slope` 0 and `skyViewFactor` 1 describe a stake on a flat field under its horizon.
+- **Shortwave on the terrain of a station (LINK-1, LINK-4): `TerrainShortwaveMain`**, in this project, upstream of the column. Example: `friuli/snowsoil_friuli_terrain.sim` and `run_terrain.sh`, the operational run of the Friuli case.
+  - **Static inputs:** a case GeoPackage (`caseFile`, `CaseGeoPackage`): points with slope, aspect, sky view factor and sensor heights, a horizon per point, the soil profiles and initial conditions, one row per 1D run in `columns`. The column takes its row with `caseColumn`. Without a GeoPackage the component also takes a station shapefile and a horizon OMS table, and the column its parameters.
+  - **Time series:** air temperature, humidity, pressure, and the cloud transmissivity or the measured global shortwave on the horizontal.
+  - **What it computes,** as GEOtop 3.0 for a point:
+    - Iqbal's clear sky times τ_c, split with Erbs;
+    - the beam on the slope, with the longitude in the solar hour, zero in the shadow of the horizon;
+    - the diffuse times V;
+    - the cosine of the snow albedo.
+
+    Its outputs `outShortwaveDirect`, `outShortwaveDiffuse`, `outCosIncidence` and `outCloudTransmissivity` go to the column's inputs of the same name.
+  - **Low sun.** With a measured global shortwave and the sun too low for a τ_c, the measurement goes to the diffuse. GEOtop instead takes the clear sky times its daily τ_c there, so the season's diffuse differs by about 3 % on Matsch_P2_Ref_007; the beam is the same.
+  - **Geometry.** `siteGeometry` = `cell` (default): slope, aspect, horizon and V of the point. V is computed from the horizon and the slope (`Horizon.skyViewFactor`, Dozier and Frew 1990) where the file has none. `flat` and `field` (horizon only) are for internal checks.
 - **ShortWaveRadiationBalance of GEOframe: not linked.** The point case runs on the Friuli DEM once ported to the current hortonmachine (imports, two calls, a `TOWGS84` in the `.prj`). It lacks what `TerrainShortwaveMain` does:
   - a cloud transmissivity on a slope (it gives only the clear sky);
   - the longitude in the hour angle;
