@@ -33,9 +33,9 @@ The run needs JDK 21, Maven (offline works) and `oms-3.5.12.jar` in the local Ma
 
 | Path | Content |
 |---|---|
-| `geotop/` | the corrected GEOtop 3.0 run without canopy, produced by `casi/Matsch_P2_Ref_007/run.sh corretta` of the GEO2GEO workspace (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, Date only, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt`; `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `5fae8eba…` |
+| `geotop/` | the corrected GEOtop 3.0 run without canopy, produced by `casi/Matsch_P2_Ref_007/run.sh corretta` of the GEO2GEO workspace (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, Date only, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt` (GEOtop's cloudiness diagnostics, cut to the period of the run); `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `5fae8eba…` |
 | `forcing.properties` | the case's settings for the forcing tools |
-| `data/` | OMS CSV forcing at 900 s, written by `run.sh` (`GeotopForcingFiles`) |
+| `data/` | OMS CSV forcing at 900 s, written by `run.sh` (`GeotopForcingFiles`), not versioned; `matsch_p2_ref_007.gpkg`, the case GeoPackage (`make_case.sh`) |
 | `grid/` | the soil as WHETGEO-1D CSV inputs |
 | `snowsoil_matsch_p2_ref_007.sim` | the OMS3 simulation |
 | `output/` | the outputs (not versioned): `snowsoil.nc`, and the GEOtop-like CSV files with dates in UTC+1 |
