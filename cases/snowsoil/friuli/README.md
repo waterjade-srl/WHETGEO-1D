@@ -150,13 +150,13 @@ explain it: part of the gap is in the energy balance.
 reads no GEOtop file. Each station is on its terrain: slope, aspect, horizon, and a sky view factor V computed
 from them.
 
-**Static inputs: one GeoPackage, `data/friuli.gpkg`** (`make_case.py`). The time series stay in `data/*.csv`.
+**Static inputs: one GeoPackage, `data/friuli.gpkg`**, written by `make_case.sh` with `tools/geotop2case` from the GEOtop 3.0 runs of the stations on their terrain (`FRIULI_GT3`). The time series stay in `data/*.csv`.
 
 | Layer or table | Content |
 |---|---|
-| `points` (POINT, EPSG:3035) | id, name, elevation, lat, lon, slope and aspect of the 250 m map cell, `svf` from the horizon and the slope, `svf_map` (the map's, not used), `site_type`, `wind_height`, `temperature_height` |
+| `points` (POINT, EPSG:3035) | id, name, elevation, lat, lon, slope and aspect of the 250 m map cell, `svf` from the horizon and the slope, `svf_geotop` (the one of the GEOtop run, not used), `site_type`, `wind_height`, `temperature_height` |
 | `horizon` | point_id, azimuth, height: 16 directions, every 22.5° |
-| `soil_layers`, `soil_parameters`, `soil_parameter_types`, `initial_condition` | WHETGEO-1D's soil inputs (the columns of the CSV files of `grid/`), by `profile_id` and `ic_id` |
+| `soil_layers`, `soil_parameters`, `soil_parameter_types`, `initial_condition` | WHETGEO-1D's soil inputs, by `profile_id` and `ic_id`: the soil of `grid/`; one initial condition per station, 1 °C and the water table at 1 m, hydrostatic along the slope as GEOtop (ψ × cos β) |
 | `columns` | id, point_id, profile_id, ic_id, forcing (absent or empty: one set): one row per 1D run |
 | `provenance` | sources, their SHA-256, the script |
 
@@ -225,11 +225,11 @@ Every term moves the port and GEOtop 3.0 the same way:
    - Optional: incoming longwave, if measured.
 2. **Describe the soil**: cells, initial temperature and suction, soil parameters (`grid/` as CSV, or in the
    case GeoPackage).
-3. **Describe the station** in a case GeoPackage like `data/friuli.gpkg` (see `make_case.py`): point, horizon,
-   soil, a row in `columns`. Then copy `snowsoil_friuli_terrain.sim` and change the dates and the rain/snow
+3. **Describe the station** in a case GeoPackage like `data/friuli.gpkg`: point, horizon, soil, a row in
+   `columns`. From a GEOtop 3.0 point run of the station, `tools/geotop2case` writes it (see `make_case.sh`). Then copy `snowsoil_friuli_terrain.sim` and change the dates and the rain/snow
    thresholds. Without a GeoPackage, `snowsoil_friuli.sim` takes coordinates, elevation and sensor heights
    (`windHeight`, `temperatureHeight`) as parameters, on flat ground.
-4. **Start in autumn, without snow.** The column does not take an initial snowpack yet.
+4. **Start in autumn, without snow**, or give the snow at the start in the GeoPackage (`tools/caseedit snow`).
 
 The settings that are not written in the `.sim` take the defaults of the configuration. The user guide,
 `cases/snowsoil/README.md`, lists them all.
