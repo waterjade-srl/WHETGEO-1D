@@ -1,6 +1,5 @@
 data/
 output/
 .cp.txt
-# case data, not versioned: see README.md (Data) and DATA.sha256
+# case data, not versioned: see README.md (Getting the data) and DATA.sha256; data/canada_ntgs.gpkg too
 geotop/
-grid/

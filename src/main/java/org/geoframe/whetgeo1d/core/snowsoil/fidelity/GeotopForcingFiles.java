@@ -92,7 +92,10 @@ public final class GeotopForcingFiles {
 	 * {@code clearSkyEmissivity}, {@code firstStepEnd}
 	 * and {@code lastStepEnd} (UTC, yyyy-MM-dd HH:mm), {@code timeStep} [s],
 	 * {@code outputFolder}, {@code stationID}, {@code geotopPointFile}
-	 * (optional: the fallbacks); optional column headers, see
+	 * (optional: the fallbacks), {@code precipitationOnSlope} (optional,
+	 * default true: rain and snow per unit area of the slope, as GEOtop; false:
+	 * per unit horizontal area, for a column on the slope of its case);
+	 * optional column headers, see
 	 * {@link #headers(Properties)}.
 	 */
 	public static void run(Properties p, Path base) throws IOException {
@@ -107,6 +110,9 @@ public final class GeotopForcingFiles {
 				new GeotopPrecipitation(number(p, "rainThreshold"), number(p, "snowThreshold"),
 						number(p, "rainCorrection"), number(p, "snowCorrection")),
 				EnumUtils.fromString(IncomingLongwave.ClearSkyEmissivity.class, p.getProperty("clearSkyEmissivity")));
+		if (!Boolean.parseBoolean(p.getProperty("precipitationOnSlope", "true").trim())) {
+			forcing.precipitationPerHorizontalArea();
+		}
 		long first = LocalDateTime.parse(p.getProperty("firstStepEnd"), OMS).toEpochSecond(ZoneOffset.UTC);
 		long last = LocalDateTime.parse(p.getProperty("lastStepEnd"), OMS).toEpochSecond(ZoneOffset.UTC);
 		long dt = (long) number(p, "timeStep");

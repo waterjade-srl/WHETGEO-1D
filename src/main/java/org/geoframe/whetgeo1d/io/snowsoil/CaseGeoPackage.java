@@ -53,8 +53,13 @@ import org.geoframe.whetgeo1d.core.snowsoil.forcing.Horizon;
  * parameters also by {@code parameter_id}, in the order the grid refers to
  * them) and {@code ic_id};</li>
  * <li>{@code columns}: {@code id}, {@code point_id}, {@code profile_id},
- * {@code ic_id}, one row per 1D run.</li>
+ * {@code ic_id}, optionally {@code forcing}, one row per 1D run.</li>
  * </ul>
+ *
+ * The time series are keyed by point, as GEOframe's series by station
+ * ({@code value_<point id>}). A place driven by several forcing sets (two
+ * reanalyses, say) is one point with one column per set: the column names its
+ * set in {@code forcing}, and the series of each set stay in their own tables.
  *
  * The layer of points is a standard GeoPackage feature table (GEOframe's
  * {@code OmsVectorReader} reads it as {@code file.gpkg#points}); the other
@@ -67,8 +72,11 @@ public final class CaseGeoPackage {
 			double aspect, double svf, double windHeight, double temperatureHeight) {
 	}
 
-	/** A 1D run: where, which soil profile, which initial condition. */
-	public record Column(int id, int pointId, int profileId, int initialConditionId) {
+	/**
+	 * A 1D run: where, which soil profile, which initial condition, and which
+	 * forcing set (null when the case has one).
+	 */
+	public record Column(int id, int pointId, int profileId, int initialConditionId, String forcing) {
 	}
 
 	private final Path file;
@@ -85,11 +93,14 @@ public final class CaseGeoPackage {
 	}
 
 	public Column column(int id) {
-		List<Object[]> r = query("SELECT point_id, profile_id, ic_id FROM columns WHERE id = ?", id);
+		boolean sets = !query("SELECT 1 FROM pragma_table_info('columns') WHERE name = 'forcing'").isEmpty();
+		List<Object[]> r = query("SELECT point_id, profile_id, ic_id" + (sets ? ", forcing" : "")
+				+ " FROM columns WHERE id = ?", id);
 		if (r.isEmpty()) {
 			throw new IllegalArgumentException(file + ": no column " + id);
 		}
-		return new Column(id, integer(r.get(0)[0]), integer(r.get(0)[1]), integer(r.get(0)[2]));
+		Object[] c = r.get(0);
+		return new Column(id, integer(c[0]), integer(c[1]), integer(c[2]), sets ? (String) c[3] : null);
 	}
 
 	public Point point(int id) {

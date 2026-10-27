@@ -109,6 +109,38 @@ def test_geopackage(run, tmp_path):
     assert sorted(os.listdir(tmp_path / "series")) == ["airTemperature.csv", "precipitation.csv", "pressure.csv"]
 
 
+def test_forcing_sets(run, tmp_path):
+    """Two forcing sets at the same point make one point with two columns; another point stays apart."""
+    other = tmp_path / "other"
+    other.mkdir()
+    for f in ("soil", "hor0001.txt", "meteo0001.txt"):
+        os.symlink(run / f, other / f)
+    (other / "geotop.inpts").write_text(INPTS.replace("PointSlope = 30", "PointSlope = 20"))
+    out = tmp_path / "case.gpkg"
+    series = tmp_path / "series"
+    g.main([str(out), str(run), str(run), str(other), "--epsg", "32632", "--names", "A,B",
+            "--forcing", "ERA5,JRA3Q,ERA5", "--series", str(series)])
+    with sqlite3.connect(out) as c:
+        assert c.execute("SELECT id, point_id, forcing, note FROM columns ORDER BY id").fetchall() == [
+            (1, 1, "ERA5", "A ERA5"), (2, 1, "JRA3Q", "A JRA3Q"), (3, 2, "ERA5", "B ERA5")]
+        assert c.execute("SELECT id, name, slope FROM points ORDER BY id").fetchall() == [(1, "A", 30.0),
+                                                                                          (2, "B", 20.0)]
+        assert c.execute("SELECT COUNT(*) FROM horizon").fetchone() == (32,)
+    assert sorted(os.listdir(series)) == ["ERA5", "JRA3Q"]
+    header = lambda s: (series / s / "airTemperature.csv").read_text().splitlines()[3]
+    assert header("ERA5") == "@H,timestamp,value_1,value_2"
+    assert header("JRA3Q") == "@H,timestamp,value_1"
+    with pytest.raises(SystemExit):  # the same set twice at the same point
+        g.main([str(out), str(run), str(run), "--epsg", "32632", "--forcing", "ERA5,ERA5", "--series", str(series)])
+
+
+def test_svf_of_run(run, tmp_path):
+    out = tmp_path / "case.gpkg"
+    g.main([str(out), str(run), "--epsg", "32632", "--svf-of-run"])
+    with sqlite3.connect(out) as c:
+        assert c.execute("SELECT svf, svf_geotop FROM points").fetchone() == (1.0, 1.0)
+
+
 def test_flat_ground_sees_the_whole_sky():
     assert g.sky_view_factor([0.0], [0.0], 0.0, 0.0) == pytest.approx(1.0)
     assert g.sky_view_factor([0.0], [0.0], 30.0, 120.0) == pytest.approx((1 + math.cos(math.radians(30))) / 2)

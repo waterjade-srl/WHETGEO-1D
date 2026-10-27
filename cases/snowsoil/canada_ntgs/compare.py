@@ -19,6 +19,7 @@ Used by canada_ntgs_comparison.ipynb; also runnable as a script: python3 compare
 """
 import gzip
 import os
+import sqlite3
 import sys
 
 import numpy as np
@@ -40,11 +41,15 @@ def _csv(path):
 
 
 def grid(case):
-    """Thickness [mm] and theta_r of the layers, from the top."""
-    g = pd.read_csv(os.path.join(HERE, "grid", case, "grid_geometry.csv"))
-    eta = g["eta"].values
-    p = pd.read_csv(os.path.join(HERE, "grid", case, "swrc_parameters.csv"), comment="#")
-    return -np.diff(eta) * 1000.0, p["thetaR"].values
+    """Thickness [mm] and theta_r of the layers, from the top, from the case GeoPackage (column of the case)."""
+    with sqlite3.connect(os.path.join(HERE, "data", "canada_ntgs.gpkg")) as c:
+        (profile,) = c.execute("SELECT profile_id FROM columns WHERE id = ?", (CASES.index(case) + 1,)).fetchone()
+        layers = c.execute("SELECT eta, parameterID FROM soil_layers WHERE profile_id = ? ORDER BY fid",
+                           (profile,)).fetchall()
+        theta_r = dict(c.execute("SELECT parameter_id, thetaR FROM soil_parameters WHERE profile_id = ?",
+                                 (profile,)).fetchall())
+    eta = np.array([e for e, _ in layers])
+    return -np.diff(eta) * 1000.0, np.array([theta_r[p] for _, p in layers[:-1]])
 
 
 def thaw_depth(temperature, ice, liquid, dz, theta_r):

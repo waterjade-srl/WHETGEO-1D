@@ -4,10 +4,18 @@ Writes the case GeoPackage of 1D runs (read by `CaseGeoPackage`, `SnowSoilSolver
 
 ```bash
 python3 tools/geotop2case/geotop2case.py case.gpkg RUN [RUN ...] --epsg CODE \
-    [--names A,B,...] [--site-type station] [--directions 16] [--case TEXT] [--series data/]
+    [--names A,B,...] [--site-type station] [--directions 16] [--case TEXT] [--series data/] [--forcing F1,F2,...] [--svf-of-run]
 ```
 
 Every point of every run becomes a point and a column of the case, numbered from 1 in the order given. Identical soil profiles and initial conditions are written once. Requires `geopandas`, `pyproj` and `numpy`.
+
+**Several forcing sets at one place** (`--forcing`, one name per run). The same borehole driven by two reanalyses, say, is one point with a column per set:
+
+- a point equal to one already written (coordinates, elevation, slope, aspect, horizon, sensor heights) is not written again;
+- the column records its set in `columns.forcing`;
+- with `--series`, each set has its own folder, `data/<set>/`, keyed by point as GEOframe's series (`value_<point id>`).
+
+**Fidelity cases** (`--svf-of-run`): `svf` is the sky view factor of the GEOtop run instead of the one computed from the horizon, so that the case describes the site as GEOtop's run saw it (GEOtop takes 1 where a point run has none, whatever its slope).
 
 ## What it reads
 
@@ -29,7 +37,7 @@ It reads what GEOtop 3.0 reads, with GEOtop's precedence and defaults:
   - `svf` is computed from the horizon, resampled to `--directions` directions, and the slope (Dozier and Frew 1990): this is the one the column uses.
   - `svf_geotop` is the one of the GEOtop run, kept for traceability.
 - **Soil:** one control volume per GEOtop layer, in SI units.
-- **`columns`** and **`provenance`**, with the SHA-256 of every file read.
+- **`columns`** (with `forcing`, NULL without `--forcing`) and **`provenance`**, with the SHA-256 of every file read.
 - **Time series (`--series`):** in UTC.
   - Precipitation is the intensity times the interval to the previous record.
   - The files are read from `meteo0001.txt.old` when a GEOtop run left one, because GEOtop rewrites the file it read without some of its columns.

@@ -141,7 +141,7 @@ public final class GeotopForcing {
 	private final SolarGeometry site;
 	private final double standardTime;
 	private final double pressure;
-	private final double projection;
+	private double projection;
 	private final GeotopPrecipitation precipitation;
 	private final IncomingLongwave.ClearSkyEmissivity emissivity;
 	private final double skyViewFactor;
@@ -183,6 +183,14 @@ public final class GeotopForcing {
 		this.shortwave = new SlopeShortwave(site, clearSky, Math.toRadians(slope), Math.toRadians(aspect),
 				skyViewFactor, pointHorizon);
 		this.averagedSeries = averagedSeries(stationHorizon);
+	}
+
+	/**
+	 * Rain and snow per unit horizontal area, without cos β: for a column that
+	 * counts them on its own slope ({@code SnowSoilSolver1DMain.slope}).
+	 */
+	public void precipitationPerHorizontalArea() {
+		projection = 1.0;
 	}
 
 	/** Pressure of the point [Pa]. */

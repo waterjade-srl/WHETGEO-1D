@@ -15,14 +15,18 @@ For each of the four cases this writes geotop/<site>_<forcing>/ with the followi
   - From point0001.txt: Tsurface, Evap_surface, snow depth, SWE, lowest and highest thawed depth.
   - From soilTz0001.txt: soil temperature at 0.1, 0.5, 1, 2 and 4 m.
   - Dates are the ends of the hours, UTC, in GEOtop's format.
-- grid/: the soil as WHETGEO-1D CSV inputs. It has the 20 layers of soil0001.txt in eta, one parameter set per
-  layer, and the initial psi (InitPres) and T (InitTemp) at the layer centres.
+- once for the four, data/canada_ntgs.gpkg: the case GeoPackage (CaseGeoPackage, tools/geotop2case) of the four runs: two points,
+  NTGS1 and NTGS2, and a column per run, with its forcing set (ERA5 or JR3QG) in columns.forcing. Columns 1-4
+  are NTGS1_ERA5, NTGS1_JR3QG, NTGS2_ERA5, NTGS2_JR3QG. It describes the sites as GEOtop's runs saw them: the
+  slope and the flat horizon of the runs, and their sky view factor, 1 (none given; --svf-of-run).
 
 Usage: python3 make_inputs.py [sims_folder]    (default: $CANADA_SIMS)
 """
 import gzip
+import io
 import os
 import shutil
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -32,13 +36,18 @@ SITES = {
     "NTGS2": (68.537861, -133.762289, 107.0, 35.0, 0.0),
 }
 FORCINGS = ("ERA5", "JR3QG")
+# point of each site in the case GeoPackage, and station ID of its forcing series
+POINT_ID = {"NTGS1": 1, "NTGS2": 2}
+REPO = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
 DEPTHS_MM = (100, 500, 1000, 2000, 4000)
 POINT_COLUMNS = ("Tsurface[C]", "Evap_surface[mm]", "snow_depth[mm]", "snow_water_equivalent[mm]",
                  "lowest_thawed_soil_depth[mm]", "highest_thawed_soil_depth[mm]")
-# GEOtop's default specific storativity, 1e-7 mm-1 (parameters.cc:1663), as WHETGEO's alpha_SS = S_s / (rho g)
-ALPHA_SS = 1e-7 * 1000.0 / (1000.0 * 9.81)
-# hydraulic conductivity: irrelevant with WaterBalance = 0 / soilWaterMode Fixed
-KS = 1e-5
+
+
+def gzip_writer(path, text=False):
+    """A gzip file without the time of writing in its header, so that the same input gives the same bytes."""
+    f = gzip.GzipFile(path, "wb", mtime=0)
+    return io.TextIOWrapper(f) if text else f
 
 
 def cases():
@@ -58,7 +67,7 @@ def reference(src, out):
     theader, trows = read_table(os.path.join(src, "output-tabs", "soilTz0001.txt"))
     tidx = [theader.index("%f" % d) for d in DEPTHS_MM]
     soil = {r[0]: [r[i] for i in tidx] for r in trows}
-    with gzip.open(os.path.join(out, "reference.csv.gz"), "wt") as f:
+    with gzip_writer(os.path.join(out, "reference.csv.gz"), text=True) as f:
         f.write("Date12[DDMMYYYYhhmm]," + ",".join(POINT_COLUMNS) + ","
                 + ",".join("T%d[C]" % d for d in DEPTHS_MM) + "\n")
         for r in rows:
@@ -66,37 +75,6 @@ def reference(src, out):
             if t is None:
                 continue
             f.write(r[0] + "," + ",".join(r[i] for i in idx) + "," + ",".join(t) + "\n")
-
-
-def grid(src, out):
-    header, rows = read_table(os.path.join(src, "soil", "soil0001.txt"))
-    col = {h: i for i, h in enumerate(header)}
-    os.makedirs(out, exist_ok=True)
-    tops = [0.0]
-    for r in rows:
-        tops.append(tops[-1] - float(r[col["Dz"]]) / 1000.0)
-    with open(os.path.join(out, "grid_geometry.csv"), "w") as f:
-        f.write("Type,eta,K,equationStateID,parameterID\n")
-        for i, r in enumerate(rows):
-            f.write("L,%.6f,1,0,%d\n" % (tops[i], i + 1))
-        f.write("L,%.6f,nan,nan,nan\n" % tops[-1])
-    with open(os.path.join(out, "initial_condition.csv"), "w") as f:
-        f.write("eta,psi0,t0\n")
-        for i, r in enumerate(rows):
-            centre = 0.5 * (tops[i] + tops[i + 1])
-            f.write("%.6f,%.6f,%.6f\n" % (centre, float(r[col["InitPres"]]) / 1000.0,
-                                          float(r[col["InitTemp"]]) + 273.15))
-    with open(os.path.join(out, "swrc_parameter_types.csv"), "w") as f:
-        f.write("val1,val2\nn,par1\nalpha,par2\n")
-    with open(os.path.join(out, "swrc_parameters.csv"), "w") as f:
-        f.write("spDensity,spConductivity,spSpecificHeatCapacity,thetaS,thetaR,meltingT,alpha,n,"
-                "alphaSpecificStorage,betaSpecificStorage,Ks\n")
-        f.write("# soil0001.txt of GEOtop in SI, one set per layer from the top: a [mm-1] x 1000, solids rho c ="
-                " thermcap as 2200 kg m-3 x 1000 J kg-1 K-1, S_s = GEOtop's default 1e-7 mm-1, Ks irrelevant\n")
-        for r in rows:
-            f.write("%.6g,%s,1000,%s,%s,273.15,%.6g,%s,%.10g,0.0,%g\n" % (
-                float(r[col["thermcap"]]) / 1000.0, r[col["thermcond"]], r[col["sat"]], r[col["res"]],
-                float(r[col["a"]]) * 1000.0, r[col["n"]], ALPHA_SS, KS))
 
 
 def properties(site, out):
@@ -137,11 +115,13 @@ clearSkyEmissivity = DILLEY_OBRIEN_1998
 firstStepEnd = 2020-09-01 01:00
 lastStepEnd = 2023-09-01 00:00
 timeStep = 3600
-stationID = 1
+stationID = %d
+# rain and snow per unit horizontal area: the column counts them on the slope of the case
+precipitationOnSlope = false
 outputFolder = ../../data/%s
 # fallback from GEOtop's own output: Tsurface without snow (no bare-soil energy balance in the column)
 geotopPointFile = reference.csv
-""" % (lat, lon, z, slope, aspect, os.path.basename(out)))
+""" % (lat, lon, z, slope, aspect, POINT_ID[site], os.path.basename(out)))
 
 
 def main():
@@ -154,15 +134,22 @@ def main():
         out = os.path.join(HERE, "geotop", case)
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(src, "meteo", "meteo0001.txt.old"), "rb") as fin, \
-                gzip.open(os.path.join(out, "meteo0001.txt.gz"), "wb") as fout:
+                gzip_writer(os.path.join(out, "meteo0001.txt.gz")) as fout:
             shutil.copyfileobj(fin, fout)
         shutil.copy(os.path.join(src, "soil", "soil0001.txt"), out)
         shutil.copy(os.path.join(src, "horizon", "horizon0001.txt"), out)
         shutil.copy(os.path.join(src, "geotop.inpts"), out)
         reference(src, out)
-        grid(src, os.path.join(HERE, "grid", case))
         properties(site, out)
         print(case, "written")
+    runs = [os.path.join(sims, c + "_senza_chioma_corretta") for c in cases()]
+    os.makedirs(os.path.join(HERE, "data"), exist_ok=True)
+    subprocess.run([sys.executable, os.path.join(REPO, "tools", "geotop2case", "geotop2case.py"),
+                    os.path.join(HERE, "data", "canada_ntgs.gpkg")] + runs
+                   + ["--epsg", "32608", "--names", ",".join(SITES),
+                      "--forcing", ",".join(f for _ in SITES for f in FORCINGS), "--svf-of-run",
+                      "--case", "NTGS1 and NTGS2 boreholes near Inuvik (NWT), GEOtop 3.0 without canopy, corrected"],
+                   check=True)
 
 
 if __name__ == "__main__":

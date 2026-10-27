@@ -157,7 +157,7 @@ from them.
 | `points` (POINT, EPSG:3035) | id, name, elevation, lat, lon, slope and aspect of the 250 m map cell, `svf` from the horizon and the slope, `svf_map` (the map's, not used), `site_type`, `wind_height`, `temperature_height` |
 | `horizon` | point_id, azimuth, height: 16 directions, every 22.5° |
 | `soil_layers`, `soil_parameters`, `soil_parameter_types`, `initial_condition` | WHETGEO-1D's soil inputs (the columns of the CSV files of `grid/`), by `profile_id` and `ic_id` |
-| `columns` | id, point_id, profile_id, ic_id: one row per 1D run |
+| `columns` | id, point_id, profile_id, ic_id, forcing (absent or empty: one set): one row per 1D run |
 | `provenance` | sources, their SHA-256, the script |
 
 - `-Dcolumn=n` picks the row of `columns`. The column (`caseFile`, `caseColumn`) takes from it its station ID,
@@ -175,11 +175,9 @@ from the case's 250 m DEM, which ends 0.4 km north of Casera Pieltinis.
 **The map's sky view factor is not used.** The 250 m map gives V = 0.78–0.87 at the stations. The horizons
 give 0.94–0.98 (Dozier and Frew 1990, on the slope).
 
-`-Dgeometry=flat` and `-Dgeometry=field` (a flat field under its horizon) are for internal checks only.
+Daily snow depth against the stake, operational run, next to the flat column of `snowsoil_friuli.sim`:
 
-Daily snow depth against the stake, operational run (`cell`):
-
-| Station | RMSE | Melt-out, run / measured | Flat column (`flat`) |
+| Station | RMSE | Melt-out, run / measured | Flat column |
 |---|---|---|---|
 | Chiansaveit (20° NNE) | 0.20 m | 26/04 / 02/05 | 0.29 m |
 | Sauris di sopra (0°) | 0.06 m | 04/04 / 02/04 | 0.07 m |
@@ -187,7 +185,6 @@ Daily snow depth against the stake, operational run (`cell`):
 | Casera Pieltinis (12° SSE) | 0.20 m | 06/04 / 16/04 | 0.11 m |
 
 **Checks.**
-- `flat` from the GeoPackage gives, bit for bit, the data it gave from a shapefile and the CSV soil inputs.
 - Given the same pressure, the shortwave is the one that GEOtop 3.0's computation (`run_topography.sh`, below)
   gives for the same geometry.
 - 16 directions instead of 72 move V by at most 0.003 and the snow depth RMSE by at most 0.004 m.
