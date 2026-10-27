@@ -8,3 +8,5 @@ REPO=$(cd "$CASE/../../.." && pwd)
 GEOTOP_REPO=${GEOTOP_REPO:-$HOME/wj-git/geotop}
 python3 "$REPO/tools/geotop2case/geotop2case.py" "$CASE/data/matsch_p2_ref_007.gpkg" "$GEOTOP_REPO/tests/1D/Matsch_P2_Ref_007" \
     --epsg 32632 --names "Matsch P2" --case "Matsch_P2_Ref_007, GEOtop 3.0 official 1D test: station P2 at Montecini, Val Mazia (BZ)"
+# a named grid as soil_layers (classical), checked against WHETGEO-1D's reader by CaseGeoPackageTest
+python3 "$REPO/tools/caseedit/caseedit.py" grid add "$CASE/data/matsch_p2_ref_007.gpkg" --profile 1 --method classical --note "as soil_layers"

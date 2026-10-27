@@ -42,6 +42,7 @@ import org.geoframe.whetgeo1d.core.boundaryconditions.IBoundaryCondition.Diffusi
 import org.geoframe.whetgeo1d.core.boundaryconditions.IBoundaryCondition.RichardsBoundaryConditionType;
 import org.geoframe.whetgeo1d.core.snowsoil.ColumnBalance;
 import org.geoframe.whetgeo1d.core.snowsoil.IceAwareRetention;
+import org.geoframe.whetgeo1d.core.snowsoil.InitialSnowpack;
 import org.geoframe.whetgeo1d.core.snowsoil.NewtonSettings;
 import org.geoframe.whetgeo1d.core.snowsoil.SnowHeatProperties;
 import org.geoframe.whetgeo1d.core.snowsoil.RunDiagnostics;
@@ -80,6 +81,8 @@ import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilNetcdfWriter;
 import org.geoframe.whetgeo1d.io.snowsoil.SnowSoilOutputWriter;
 import org.geoframe.whetgeo1d.io.snowsoil.SoilGridInputs;
 import org.geoframe.whetgeo1d.io.snowsoil.SoilWaterContent;
+import org.geoframe.whetgeo1d.snow.GradedThicknessRestratification;
+import org.geoframe.whetgeo1d.snow.MassCriterionRestratification;
 import org.geoframe.whetgeo1d.snow.SnowEquationOfState;
 import org.geoframe.whetgeo1d.snow.SnowThermalConductivity;
 import org.geoframe.whetgeo1d.snow.surface.MoninObukhov;
@@ -422,9 +425,17 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Column of the case GeoPackage (columns.id).")
 	@In
 	public int caseColumn = 0;
+	@Description("Named grid of the case (grids.grid_id, written by tools/casegrid) for the soil of the column; 0: the cells of soil_layers.")
+	@In
+	public int caseGrid = 0;
+	@Description("Initial condition of the case (ic_id): the soil profile and, if the case has it, the initial snow; 0: the column's.")
+	@In
+	public int caseInitialCondition = 0;
 
 	/** Forcing set of the case column, null when the case has one (see {@link CaseGeoPackage}). */
 	private String caseForcing;
+	/** Snow at the start, from the case; empty without. */
+	private InitialSnowpack.Description initialSnow = new InitialSnowpack.Description(List.of(), 0.0);
 
 	/*
 	 * SOIL GRID: either a file, or the arrays of WHETGEO-1D's grid readers
@@ -1046,7 +1057,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		}
 		NewtonSettings newton = new NewtonSettings(heatTolerance, NewtonSettings.defaults().roundOffSafety(),
 				heatMaxIterations, heatPicardIterations);
-		solver = new SnowSoilSolver(soil, water, heat, bottomType, newton, processes, List.of(), 0.0);
+		InitialSnowpack.Snowpack pack = InitialSnowpack.cells(initialSnow, eos, processes.restratification(),
+				Math.min(capacity, restratificationCells(processes)));
+		solver = new SnowSoilSolver(soil, water, heat, bottomType, newton, processes, pack.cells(), pack.surfaceAge());
 
 		site = SolarGeometry.ofDegrees(latitude, longitude, standardTime);
 		clouds = CloudTransmissivity.flat(site);
@@ -1103,6 +1116,17 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("elevation", Double.toString(elevation));
 		if (caseFile != null && !caseFile.isBlank()) {
 			attributes.put("caseColumn", Integer.toString(caseColumn));
+			if (caseGrid != 0) {
+				attributes.put("caseGrid", Integer.toString(caseGrid));
+			}
+			if (caseInitialCondition != 0) {
+				attributes.put("caseInitialCondition", Integer.toString(caseInitialCondition));
+			}
+			if (!initialSnow.layers().isEmpty()) {
+				attributes.put("initialSnow", String.format(java.util.Locale.ROOT,
+						"%d layers, %.6g kg m-2, %.6g J m-2, age %.6g d", initialSnow.layers().size(),
+						initialSnow.mass(), initialSnow.internalEnergy(), initialSnow.ageDays()));
+			}
 			if (caseForcing != null) {
 				attributes.put("caseForcing", caseForcing);
 			}
@@ -1289,6 +1313,8 @@ public class SnowSoilSolver1DMain extends HMModel {
 		CaseGeoPackage.Column column = file.column(caseColumn);
 		CaseGeoPackage.Point point = file.point(column.pointId());
 		caseForcing = column.forcing();
+		int ic = caseInitialCondition > 0 ? caseInitialCondition : column.initialConditionId();
+		initialSnow = file.snowInitial(ic).orElse(initialSnow);
 		stationID = point.id();
 		latitude = point.latitude();
 		longitude = point.longitude();
@@ -1297,12 +1323,23 @@ public class SnowSoilSolver1DMain extends HMModel {
 		temperatureHeight = point.temperatureHeight();
 		slope = point.slope();
 		skyViewFactor = file.skyViewFactor(point);
-		Path folder = file.soilGridFolder(column);
+		Path folder = file.soilGridFolder(column, caseGrid, ic);
 		try {
 			return SoilGridInputs.read(folder.toString());
 		} finally {
 			CaseGeoPackage.delete(folder);
 		}
+	}
+
+	/** Cells the restratification of the configuration may hold. */
+	private static int restratificationCells(SnowProcesses p) {
+		if (p.restratification() instanceof MassCriterionRestratification m) {
+			return m.parameters().maxCells();
+		}
+		if (p.restratification() instanceof GradedThicknessRestratification g) {
+			return g.parameters().maxCells();
+		}
+		return Integer.MAX_VALUE;
 	}
 
 	private List<String> inputFileList() {
