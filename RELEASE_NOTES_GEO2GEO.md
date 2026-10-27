@@ -1,6 +1,6 @@
 # geo2geo prototype v0.2
 
-Preview of the GEO2GEO prototype for the Rigon group: a snow and frozen-soil column in WHETGEO-1D, run from an OMS3 `.sim`. It is a preview for testing, not a release: the snow library is to move to a GEOframe repository before that (ARCH-9), and options, inputs and outputs may still change. The design is in the specification site of the project (draft v1.0); the identifiers below (COL-3, VAL-1, …) are those of the site.
+Preview of the GEO2GEO prototype for Rigonian Lab: a snow and frozen-soil column in WHETGEO-1D, run from an OMS3 `.sim`. It is a preview for testing, not a release: the snow library is to move to a GEOframe repository before that (ARCH-9), and options, inputs and outputs may still change. The design is in the specification site of the project (draft v1.0); the identifiers below (COL-3, VAL-1, …) are those of the site.
 
 ## What it holds
 
@@ -43,6 +43,6 @@ Details, tables and figures: the READMEs of the cases and the notebooks.
 
 1. Run a case of yours: a GEOtop 3.0 point run through `geotop2case` and the column. Does it work, and is anything missing?
 2. The operational acceptance criteria (VAL-3) on Friuli and the Canadian boreholes.
-3. The case GeoPackage and the record of the runs (ARCH-10), to be agreed with Andrea Antonello.
+3. The case GeoPackage and the record of the runs (ARCH-10), to be agreed with the maintainers of the GeoPackage inputs of GEOframe.
 
 Comments and problems: the Issues of this fork.
