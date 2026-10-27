@@ -38,6 +38,8 @@ It reads what GEOtop 3.0 reads, with GEOtop's precedence and defaults:
   - `svf_geotop` is the one of the GEOtop run, kept for traceability.
 - **Soil:** one control volume per GEOtop layer, in SI units.
 - **`columns`** (with `forcing`, NULL without `--forcing`) and **`provenance`**, with the SHA-256 of every file read.
+- **`snow_initial`:** GEOtop's `InitSWE`, `InitSnowDensity`, `InitSnowTemp` and `InitSnowAge` (defaults 200 kg m⁻³, −3 °C, 0 d) for the runs with `InitSWE` > 0, by initial condition.
+- Named grids and pit profiles of the snow are added afterwards with `tools/caseedit`.
 - **Time series (`--series`):** in UTC.
   - Precipitation is the intensity times the interval to the previous record.
   - The files are read from `meteo0001.txt.old` when a GEOtop run left one, because GEOtop rewrites the file it read without some of its columns.

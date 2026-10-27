@@ -134,6 +134,16 @@ def test_forcing_sets(run, tmp_path):
         g.main([str(out), str(run), str(run), "--epsg", "32632", "--forcing", "ERA5,ERA5", "--series", str(series)])
 
 
+def test_initial_snow(run, tmp_path):
+    with open(run / "geotop.inpts", "a") as f:
+        f.write("InitSWE = 23.78\nInitSnowDensity = 208.72\nInitSnowTemp = -21.47\n")
+    out = tmp_path / "case.gpkg"
+    g.main([str(out), str(run), "--epsg", "32632"])
+    with sqlite3.connect(out) as c:
+        swe, rho, t, age = c.execute("SELECT swe, density, temperature, age FROM snow_initial WHERE ic_id = 1").fetchone()
+    assert (swe, rho, age) == (23.78, 208.72, 0.0) and t == pytest.approx(273.15 - 21.47)
+
+
 def test_svf_of_run(run, tmp_path):
     out = tmp_path / "case.gpkg"
     g.main([str(out), str(run), "--epsg", "32632", "--svf-of-run"])

@@ -48,6 +48,8 @@ What is written (schema of CaseGeoPackage, SI units, eta negative in the soil):
   the solids, their heat capacity as density C/1000 [kg m-3] times 1000 J kg-1 K-1; the initial condition at
   the surface, at the centre of every layer and at the bottom (psi [m], T [K]);
 - columns: id, point_id, profile_id, ic_id, forcing (the forcing set, NULL without --forcing), note;
+- snow_initial: ic_id, swe [kg m-2], density [kg m-3], temperature [K], age [d], from InitSWE, InitSnowDensity,
+  InitSnowTemp and InitSnowAge (GEOtop's defaults 200 kg m-3, -3 degC, 0 d), for the runs with InitSWE > 0;
 - provenance: script, source runs, SHA-256 of every file read.
 
 With --series, the meteorological file of each run (MeteoFile0001.txt, one station; MeteoFile0001.txt.old
@@ -80,7 +82,7 @@ from shapely.geometry import Point
 
 NOVALUE = -9999.0
 ABSENT = -9998.0
-SCHEMA = "geo2geo 1D case, version 1"
+SCHEMA = "geo2geo 1D case, version 2"
 RHO_G = 9810.0  # [Pa m-1], specific storage per unit head -> per unit pressure
 SOLID_SPECIFIC_HEAT = 1000.0  # [J kg-1 K-1]
 MELTING = 273.15  # [K]
@@ -363,6 +365,19 @@ class Run:
         if self.inpts.string("BedrockDepthMapFile"):
             raise SystemExit(f"{self.folder}: a bedrock map is not supported")
 
+    def snow(self):
+        """GEOtop's initial snow (InitSWE [mm], InitSnowDensity, InitSnowTemp [degC], InitSnowAge [d]) as
+        (swe [kg m-2], density [kg m-3], temperature [K], age [d]); None without snow."""
+        k = self.inpts
+        for key in ("InitSWEMapFile", "InitSnowDepthMapFile", "InitSnowAgeMapFile"):
+            if k.string(key):
+                raise SystemExit(f"{self.folder}: {key} is not supported")
+        swe = k.number("InitSWE", 0, 0.0)
+        if not swe > 0.0:
+            return None
+        return (swe, k.number("InitSnowDensity", 0, 200.0), k.number("InitSnowTemp", 0, -3.0) + MELTING,
+                k.number("InitSnowAge", 0, 0.0))
+
     def sensor_heights(self):
         return (self.inpts.number("MeteoStationWindVelocitySensorHeight", 0, 10.0),
                 self.inpts.number("MeteoStationTemperatureSensorHeight", 0, 2.0))
@@ -508,6 +523,7 @@ def main(argv=None):
             grid, params, ic = whetgeo_soil(pa, water_table, p["slope"])
             if (grid, params) not in profiles:
                 profiles.append((grid, params))
+            ic = (ic, run.snow())
             if ic not in ics:
                 ics.append(ic)
             cid = len(columns) + 1
@@ -560,8 +576,12 @@ def main(argv=None):
         attributes(con, "soil_parameter_types", ["val1", "val2"], [("n", "par1"), ("alpha", "par2")],
                    ["TEXT", "TEXT"], "WHETGEO-1D swrc_parameter_types")
         attributes(con, "initial_condition", ["ic_id", "eta", "psi0", "t0"],
-                   [(i + 1,) + r for i, ic in enumerate(ics) for r in ic], ["INTEGER", "REAL", "REAL", "REAL"],
+                   [(i + 1,) + r for i, (ic, _) in enumerate(ics) for r in ic], ["INTEGER", "REAL", "REAL", "REAL"],
                    "WHETGEO-1D initial_condition")
+        attributes(con, "snow_initial", ["ic_id", "swe", "density", "temperature", "age"],
+                   [(i + 1,) + snow for i, (_, snow) in enumerate(ics) if snow],
+                   ["INTEGER", "REAL", "REAL", "REAL", "REAL"],
+                   "initial snow, one layer as GEOtop's InitSWE [kg m-2], density [kg m-3], T [K], age [d]")
         attributes(con, "columns", ["id", "point_id", "profile_id", "ic_id", "forcing", "note"], columns,
                    ["INTEGER", "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT"], "one row per 1D run")
         root = os.path.dirname(os.path.commonpath([os.path.abspath(r) for r in a.runs]))

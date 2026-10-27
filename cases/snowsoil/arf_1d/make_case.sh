@@ -8,3 +8,5 @@ REPO=$(cd "$CASE/../../.." && pwd)
 GEOTOP_REPO=${GEOTOP_REPO:-$HOME/wj-git/geotop}
 python3 "$REPO/tools/geotop2case/geotop2case.py" "$CASE/data/arf_1d.gpkg" "$GEOTOP_REPO/tests/1D/ARF_1D" \
     --epsg 32605 --names "ARF_1D" --case "ARF_1D, GEOtop 3.0 official 1D test: North Slope of Alaska, Anaktuvuk River Fire area"
+# a named grid as soil_layers (classical), checked against WHETGEO-1D's reader by CaseGeoPackageTest
+python3 "$REPO/tools/caseedit/caseedit.py" grid add "$CASE/data/arf_1d.gpkg" --profile 1 --method classical --note "as soil_layers"

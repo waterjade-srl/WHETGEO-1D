@@ -21,6 +21,7 @@ package org.geoframe.whetgeo1d.io.snowsoil;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,7 +29,9 @@ import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.List;
 
+import org.geoframe.whetgeo1d.core.snowsoil.InitialSnowpack;
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.Horizon;
 import org.junit.Test;
 
@@ -103,8 +106,8 @@ public class CaseGeoPackageTest {
 	}
 
 	/**
-	 * The forcing set of a column: null in a case without the column
-	 * {@code forcing}; read where a case has several sets at the same point.
+	 * The forcing set of a column: null in a case with one set; read where a
+	 * case has several sets at the same point.
 	 */
 	@Test
 	public void forcingSets() throws Exception {
@@ -113,7 +116,6 @@ public class CaseGeoPackageTest {
 		try {
 			Files.copy(Path.of(MATSCH + "data/matsch_p2_ref_007.gpkg"), copy, StandardCopyOption.REPLACE_EXISTING);
 			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy); Statement s = c.createStatement()) {
-				s.execute("ALTER TABLE columns ADD COLUMN forcing TEXT");
 				s.execute("UPDATE columns SET forcing = 'ERA5'");
 				s.execute("INSERT INTO columns (id, point_id, profile_id, ic_id, forcing) VALUES (2, 1, 1, 1, 'JRA3Q')");
 			}
@@ -122,6 +124,68 @@ public class CaseGeoPackageTest {
 			CaseGeoPackage.Column second = f.column(2);
 			assertEquals("JRA3Q", second.forcing());
 			assertEquals(1, second.pointId());
+		} finally {
+			Files.delete(copy);
+		}
+	}
+
+	/**
+	 * A named grid built by GEOframe's GridCreator ("classical", tools/caseedit)
+	 * gives the soil WHETGEO-1D's reader builds from soil_layers, cell by cell.
+	 */
+	@Test
+	public void namedClassicalGridAsTheReader() throws Exception {
+		for (CaseGeoPackage f : new CaseGeoPackage[] { file(MATSCH, "matsch_p2_ref_007"), file(ARF, "arf_1d") }) {
+			CaseGeoPackage.Column c = f.column(1);
+			SoilGridInputs reader = read(f, c, 0);
+			SoilGridInputs named = read(f, c, 1);
+			assertArrayEquals(reader.eta, named.eta, 1e-12);
+			assertArrayEquals(reader.controlVolume, named.controlVolume, 1e-12);
+			assertArrayEquals(reader.psi, named.psi, 1e-12);
+			assertArrayEquals(reader.temperature, named.temperature, 1e-12);
+			assertArrayEquals(reader.parameterID, named.parameterID);
+		}
+	}
+
+	private static SoilGridInputs read(CaseGeoPackage f, CaseGeoPackage.Column c, int grid) throws Exception {
+		Path folder = f.soilGridFolder(c, grid, c.initialConditionId());
+		try {
+			return SoilGridInputs.read(folder.toString());
+		} finally {
+			CaseGeoPackage.delete(folder);
+		}
+	}
+
+	/** GEOtop's InitSWE of ARF_1D, written by geotop2case; Matsch has no initial snow. */
+	@Test
+	public void initialSnowOfGeotop() {
+		InitialSnowpack.Description arf = file(ARF, "arf_1d").snowInitial(1).orElseThrow();
+		assertEquals(1, arf.layers().size());
+		assertEquals(23.78, arf.mass(), 1e-12);
+		assertEquals(273.15 - 21.47, arf.layers().get(0).temperature(), 1e-9);
+		assertTrue(file(MATSCH, "matsch_p2_ref_007").snowInitial(1).isEmpty());
+	}
+
+	/** The cases of the repository hold together; broken copies are reported, one line per problem. */
+	@Test
+	public void check() throws Exception {
+		assertEquals(List.of(), file(MATSCH, "matsch_p2_ref_007").check());
+		assertEquals(List.of(), file(ARF, "arf_1d").check());
+		Path copy = Files.createTempFile("case", ".gpkg");
+		try {
+			Files.copy(Path.of(MATSCH + "data/matsch_p2_ref_007.gpkg"), copy, StandardCopyOption.REPLACE_EXISTING);
+			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy); Statement s = c.createStatement()) {
+				// a gap in the named grid, an initial condition that stops at 0.5 m, snow above 0 °C
+				s.execute("DELETE FROM grid_cells WHERE grid_id = 1 AND cell = 5");
+				s.execute("DELETE FROM initial_condition WHERE ic_id = 1 AND eta < -0.5");
+				s.execute("UPDATE snow_initial SET temperature = 275.0");
+				s.execute("INSERT INTO snow_initial (ic_id, swe, density, temperature, age) VALUES (1, 50, 200, 275, 0)");
+			}
+			List<String> problems = new CaseGeoPackage(copy).check();
+			assertEquals(problems.toString(), 3, problems.size());
+			assertTrue(problems.get(0), problems.get(0).contains("initial condition 1 covers"));
+			assertTrue(problems.get(1), problems.get(1).contains("not adjacent"));
+			assertTrue(problems.get(2), problems.get(2).contains("initial snow of ic 1"));
 		} finally {
 			Files.delete(copy);
 		}
