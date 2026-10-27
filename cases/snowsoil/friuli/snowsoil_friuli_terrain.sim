@@ -1,7 +1,7 @@
 /*
  * Friuli case as an operational run: the same column, configuration and soil
  * as snowsoil_friuli.sim, from GEOframe inputs only. The static inputs are one
- * GeoPackage, data/friuli.gpkg (make_case.py): points with their slope,
+ * GeoPackage, data/friuli.gpkg (make_case.sh): points with their slope,
  * aspect, sky view factor and sensor heights, a 16-direction horizon per
  * point, the soil profile and the initial condition, and a row per column.
  * The time series are the OMS tables of data/. TerrainShortwaveMain computes

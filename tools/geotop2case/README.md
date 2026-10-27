@@ -63,10 +63,10 @@ The script stops on:
 - **The 13 GEOtop 3.0 1D tests:**
   - all of them convert;
   - points, soil matrix and initial pressure equal those resolved by an independent Python port of GEOtop's input code, to the last digit (GEOtop parses numbers with its own routine).
-- **Friuli** (`friuli/data/friuli.gpkg`, from the GEOtop runs of the four stations):
-  - the horizon, soil layers, soil parameters and time series are identical to those of `make_case.py` and `make_inputs.py`;
+- **Friuli** (`friuli/data/friuli.gpkg`, written by `friuli/make_case.sh` from the GEOtop runs of the four stations):
+  - the horizon, soil layers, soil parameters and time series are identical to those of the case written by hand before it and of `make_inputs.py`;
   - the coordinates are those of the GEOtop runs (SMET), within 1 m of the station list;
-  - the initial condition has GEOtop's cos(slope).
+  - the initial condition has GEOtop's cos(slope): on the terrain the runs move by at most 3.7 mm of snow depth and 0.43 K of soil temperature, with the same snow depth RMSE.
 - **Matsch, ARF_1D and the Canadian boreholes:**
   - the soil and initial condition equal the hand-written `grid/` inputs of their cases, to the digits printed there;
   - for the Canadian boreholes, Ks is GEOtop's default 1e-4 mm/s, where `grid/` has an arbitrary value (the water balance is off there).
