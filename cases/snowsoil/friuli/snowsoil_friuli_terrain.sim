@@ -8,17 +8,14 @@
  * the shortwave on the terrain upstream of the column. No GEOtop file is read.
  *
  * -Dcolumn=1..4 picks the row of the columns table (here, one per station).
- * -Dgeometry chooses how the station is described (DN-15, VAL-3):
- *   cell   the point: slope, aspect, horizon, and V computed from them (default);
- *   flat   no slope, no horizon, V = 1, as snowsoil_friuli.sim, and
- *   field  its horizon, no slope, V = 1: internal checks only.
- * Outputs in output/terrain/<geometry>/station_<n>/.
+ * The station is described by its point: slope, aspect, horizon, and V
+ * computed from them (DN-15, VAL-3).
+ * Outputs in output/terrain/station_<n>/.
  * Run with run_terrain.sh, from the root of the repository.
  */
 import oms3.SimBuilder as OMS3
 
 def column = (System.getProperty("column") ?: "1") as int
-def geometry = System.getProperty("geometry") ?: "cell"
 
 def startDate = "2025-11-01 01:00"
 def endDate   = "2026-05-01 00:00"
@@ -26,7 +23,7 @@ def timestep  = 60
 def data = "$oms_prj/data"
 def gpkg = "$oms_prj/data/friuli.gpkg"
 
-new OMS3().sim(name: "snowsoil_friuli_${geometry}_${column}") {
+new OMS3().sim(name: "snowsoil_friuli_terrain_${column}") {
 
     model(while: "reader_airT.doProcess") {
 
@@ -86,7 +83,6 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${column}") {
 
             // station geometry and shortwave on the terrain
             "terrain.caseFile"                gpkg
-            "terrain.siteGeometry"            geometry
             "terrain.standardTime"            0.0
             "terrain.tTimeStep"               3600.0
 
@@ -97,7 +93,6 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${column}") {
             // site, sensors, terrain and soil from the case: column n of data/friuli.gpkg
             "snowsoil.caseFile"               gpkg
             "snowsoil.caseColumn"             column
-            "snowsoil.siteGeometry"           geometry
             "snowsoil.standardTime"           0.0
             "snowsoil.tTimeStep"              3600.0
 
@@ -117,7 +112,7 @@ new OMS3().sim(name: "snowsoil_friuli_${geometry}_${column}") {
 
             // run header and outputs
             "snowsoil.inputFiles"             "${data}/airTemperature.csv,${data}/relativeHumidity.csv,${data}/windSpeed.csv,${data}/pressure.csv,${data}/precipitation.csv,${data}/cloudTransmissivity.csv,"
-            "snowsoil.outputPath"             "$oms_prj/output/terrain/${geometry}/station_${column}"
+            "snowsoil.outputPath"             "$oms_prj/output/terrain/station_${column}"
         }
 
         connect {

@@ -4,11 +4,22 @@ and optionally their meteorological time series as GEOframe OMS tables.
 
 Usage:
     geotop2case.py OUT.gpkg RUN [RUN ...] --epsg CODE [--names A,B,...] [--site-type TYPE]
-                   [--directions N] [--case TEXT] [--series FOLDER]
+                   [--directions N] [--case TEXT] [--series FOLDER] [--forcing F1,F2,...] [--svf-of-run]
 
 Each RUN is a folder with a geotop.inpts of a point run (PointSim = 1). Every point of every run becomes a
 point and a column of the case, numbered from 1 in the order given; identical soil profiles and initial
 conditions are written once.
+
+With --forcing, each run is given the name of its forcing set (one name per run, for instance the reanalysis
+it is driven by). A point of a run that is the same as a point already written (coordinates, elevation, slope,
+aspect, horizon and sensor heights) is not written again: its column refers to the point already there, so a
+place driven by several forcing sets is one point with one column per set. The column records its set in
+`forcing`, and with --series the tables of each set go to FOLDER/<set>/, keyed by point as the GEOframe series
+(value_<point id>).
+
+With --svf-of-run, svf is the sky view factor of the GEOtop run instead of the one computed from the horizon:
+for fidelity cases, which describe the site as GEOtop's run saw it (GEOtop takes 1 where a point run has no
+sky view factor, whatever its slope and horizon).
 
 What is read, as GEOtop 3.0 reads it (src/geotop/parameters.cc, input.cc):
 
@@ -28,7 +39,7 @@ What is written (schema of CaseGeoPackage, SI units, eta negative in the soil):
 
 - points (POINT, EPSG:CODE; the GEOtop coordinates, or latitude and longitude projected when the run has
   none): id, name, elevation, lat, lon, slope, aspect, svf (Dozier and Frew 1990, from the horizon resampled
-  to N directions and the slope), svf_geotop (the one of the GEOtop run, for traceability), site_type,
+  to N directions and the slope; with --svf-of-run, svf_geotop), svf_geotop (the one of the GEOtop run, for traceability), site_type,
   wind_height, temperature_height;
 - horizon: point_id, azimuth, height, N directions from north, linear between GEOtop's lines across north;
 - soil_layers, soil_parameters, soil_parameter_types, initial_condition: WHETGEO-1D's soil inputs, one
@@ -36,7 +47,7 @@ What is written (schema of CaseGeoPackage, SI units, eta negative in the soil):
   [mm s-1 -> m s-1], theta_r, theta_s, specific storage [mm-1 -> Pa-1, / (rho g)], thermal conductivity of
   the solids, their heat capacity as density C/1000 [kg m-3] times 1000 J kg-1 K-1; the initial condition at
   the surface, at the centre of every layer and at the bottom (psi [m], T [K]);
-- columns: id, point_id, profile_id, ic_id, note;
+- columns: id, point_id, profile_id, ic_id, forcing (the forcing set, NULL without --forcing), note;
 - provenance: script, source runs, SHA-256 of every file read.
 
 With --series, the meteorological file of each run (MeteoFile0001.txt, one station; MeteoFile0001.txt.old
@@ -467,13 +478,20 @@ def main(argv=None):
     ap.add_argument("--directions", type=int, default=16, help="directions of the horizon (default: 16)")
     ap.add_argument("--case", default="", help="description of the case, for the provenance")
     ap.add_argument("--series", help="folder for the OMS meteorological tables")
+    ap.add_argument("--forcing", help="comma-separated forcing set of each run: runs at the same point become "
+                                      "one point with a column per set, the tables go to SERIES/<set>/")
+    ap.add_argument("--svf-of-run", action="store_true",
+                    help="svf = the one of the GEOtop run, not computed from the horizon (fidelity cases)")
     a = ap.parse_args(argv)
+    forcings = a.forcing.split(",") if a.forcing else [None] * len(a.runs)
+    if len(forcings) != len(a.runs):
+        raise SystemExit(f"{len(forcings)} forcing sets for {len(a.runs)} runs")
 
     points, horizon, profiles, ics, columns, series = [], [], [], [], [], {}
-    sources = []
+    sources, place = [], {}
     directions = np.arange(a.directions) * 360.0 / a.directions
     to_crs = Transformer.from_crs(4326, a.epsg, always_xy=True)
-    for folder in a.runs:
+    for folder, forcing in zip(a.runs, forcings):
         run = Run(folder)
         pa, water_table = run.soil()
         wind, temperature = run.sensor_heights()
@@ -481,30 +499,40 @@ def main(argv=None):
         pts = run.points()
         for p in pts:
             run.bedrock_check(p, pa)
-            pid = len(points) + 1
             hor = run.horizon(p)
-            if hor is None:
-                h16 = np.zeros(a.directions)
-            else:
-                h16 = np.array([round(float(v), 4) for v in periodic(hor[0], hor[1], directions)])
-                horizon += [(pid, float(az), float(h)) for az, h in zip(directions, h16)]
+            h16 = np.zeros(a.directions) if hor is None \
+                else np.array([round(float(v), 4) for v in periodic(hor[0], hor[1], directions)])
+            x, y = (p["x"], p["y"]) if not (undefined(p["x"]) or undefined(p["y"])) \
+                else to_crs.transform(p["lon"], p["lat"])
+            key = (x, y, p["z"], p["slope"], p["aspect"], tuple(h16), wind, temperature)
             grid, params, ic = whetgeo_soil(pa, water_table, p["slope"])
             if (grid, params) not in profiles:
                 profiles.append((grid, params))
             if ic not in ics:
                 ics.append(ic)
-            x, y = (p["x"], p["y"]) if not (undefined(p["x"]) or undefined(p["y"])) \
-                else to_crs.transform(p["lon"], p["lat"])
-            name = os.path.basename(os.path.normpath(folder)) if len(pts) == 1 \
-                else "%s_%d" % (os.path.basename(os.path.normpath(folder)), int(p["id"]))
-            points.append({"id": pid, "name": name, "elevation": p["z"], "lat": p["lat"], "lon": p["lon"],
-                           "slope": p["slope"], "aspect": p["aspect"],
-                           "svf": round(sky_view_factor(directions, h16, p["slope"], p["aspect"]), 4),
-                           "svf_geotop": p["sky"], "site_type": a.site_type, "wind_height": wind,
-                           "temperature_height": temperature, "geometry": Point(x, y)})
-            columns.append((pid, pid, profiles.index((grid, params)) + 1, ics.index(ic) + 1, name))
+            cid = len(columns) + 1
+            if forcing is not None and key in place:
+                pid = place[key]
+                name = points[pid - 1]["name"]
+            else:
+                pid = len(points) + 1
+                place[key] = pid
+                if hor is not None:
+                    horizon += [(pid, float(az), float(h)) for az, h in zip(directions, h16)]
+                name = os.path.basename(os.path.normpath(folder)) if len(pts) == 1 \
+                    else "%s_%d" % (os.path.basename(os.path.normpath(folder)), int(p["id"]))
+                points.append({"id": pid, "name": name, "elevation": p["z"], "lat": p["lat"], "lon": p["lon"],
+                               "slope": p["slope"], "aspect": p["aspect"],
+                               "svf": p["sky"] if a.svf_of_run
+                               else round(sky_view_factor(directions, h16, p["slope"], p["aspect"]), 4),
+                               "svf_geotop": p["sky"], "site_type": a.site_type, "wind_height": wind,
+                               "temperature_height": temperature, "geometry": Point(x, y)})
+            columns.append((cid, pid, profiles.index((grid, params)) + 1, ics.index(ic) + 1, forcing))
             for v, values in meteo.items():
-                series.setdefault(v, {})[pid] = values
+                by_point = series.setdefault(forcing, {}).setdefault(v, {})
+                if pid in by_point:
+                    raise SystemExit(f"{folder}: point {pid} has forcing set {forcing} twice")
+                by_point[pid] = values
         sources += run.read
     if a.names:
         names = a.names.split(",")
@@ -512,7 +540,7 @@ def main(argv=None):
             raise SystemExit(f"{len(names)} names for {len(points)} points")
         for p, name in zip(points, names):
             p["name"] = name
-        columns = [c[:4] + (name,) for c, name in zip(columns, names)]
+    columns = [c + (" ".join([points[c[1] - 1]["name"]] + ([c[4]] if c[4] else [])),) for c in columns]
 
     if os.path.exists(a.out):
         os.remove(a.out)
@@ -534,14 +562,15 @@ def main(argv=None):
         attributes(con, "initial_condition", ["ic_id", "eta", "psi0", "t0"],
                    [(i + 1,) + r for i, ic in enumerate(ics) for r in ic], ["INTEGER", "REAL", "REAL", "REAL"],
                    "WHETGEO-1D initial_condition")
-        attributes(con, "columns", ["id", "point_id", "profile_id", "ic_id", "note"], columns,
-                   ["INTEGER", "INTEGER", "INTEGER", "INTEGER", "TEXT"], "one row per 1D run")
+        attributes(con, "columns", ["id", "point_id", "profile_id", "ic_id", "forcing", "note"], columns,
+                   ["INTEGER", "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT"], "one row per 1D run")
         root = os.path.dirname(os.path.commonpath([os.path.abspath(r) for r in a.runs]))
         runs = ", ".join(os.path.relpath(os.path.abspath(r), root) for r in a.runs)
         prov = [("schema", SCHEMA), ("case", a.case), ("source", "GEOtop 3.0 point runs: " + runs),
                 ("written", datetime.date.today().isoformat()), ("script", "tools/geotop2case/geotop2case.py"),
-                ("svf", f"computed from the {a.directions}-direction horizon and the slope (Dozier and Frew 1990); "
-                        "svf_geotop is the one of the GEOtop run")]
+                ("svf", "the one of the GEOtop run (fidelity)" if a.svf_of_run
+                 else f"computed from the {a.directions}-direction horizon and the slope (Dozier and Frew 1990); "
+                      "svf_geotop is the one of the GEOtop run")]
         seen = []
         for p in sources:
             if p not in seen:
@@ -551,7 +580,9 @@ def main(argv=None):
                                  hashlib.sha256(f.read()).hexdigest()))
         attributes(con, "provenance", ["key", "value"], prov, ["TEXT", "TEXT"], "where the data come from")
     if a.series:
-        write_series(a.series, series, [p["id"] for p in points])
+        for forcing, tables in series.items():
+            ids = sorted(set().union(*(t.keys() for t in tables.values())))
+            write_series(a.series if forcing is None else os.path.join(a.series, forcing), tables, ids)
     print(gpd.read_file(a.out, layer="points").drop(columns="geometry").to_string(index=False))
 
 

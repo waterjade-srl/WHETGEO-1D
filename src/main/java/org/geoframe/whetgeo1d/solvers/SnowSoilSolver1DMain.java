@@ -422,9 +422,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Column of the case GeoPackage (columns.id).")
 	@In
 	public int caseColumn = 0;
-	@Description("How the case point is described: cell (slope, aspect and sky view factor of the point), field (a stake on a flat field: slope 0, V = 1) or flat.")
-	@In
-	public String siteGeometry = "cell";
+
+	/** Forcing set of the case column, null when the case has one (see {@link CaseGeoPackage}). */
+	private String caseForcing;
 
 	/*
 	 * SOIL GRID: either a file, or the arrays of WHETGEO-1D's grid readers
@@ -1103,7 +1103,9 @@ public class SnowSoilSolver1DMain extends HMModel {
 		attributes.put("elevation", Double.toString(elevation));
 		if (caseFile != null && !caseFile.isBlank()) {
 			attributes.put("caseColumn", Integer.toString(caseColumn));
-			attributes.put("siteGeometry", siteGeometry);
+			if (caseForcing != null) {
+				attributes.put("caseForcing", caseForcing);
+			}
 		}
 		// terrain only when there is one: flat runs keep their header and restart label
 		if (slope != 0.0) {
@@ -1286,31 +1288,21 @@ public class SnowSoilSolver1DMain extends HMModel {
 		CaseGeoPackage file = new CaseGeoPackage(Path.of(caseFile));
 		CaseGeoPackage.Column column = file.column(caseColumn);
 		CaseGeoPackage.Point point = file.point(column.pointId());
+		caseForcing = column.forcing();
 		stationID = point.id();
 		latitude = point.latitude();
 		longitude = point.longitude();
 		elevation = point.elevation();
 		windHeight = point.windHeight();
 		temperatureHeight = point.temperatureHeight();
-		boolean cell = EnumUtils.fromString(SiteGeometry.class, siteGeometry) == SiteGeometry.CELL;
-		slope = cell ? point.slope() : 0.0;
-		skyViewFactor = cell ? file.skyViewFactor(point) : 1.0;
+		slope = point.slope();
+		skyViewFactor = file.skyViewFactor(point);
 		Path folder = file.soilGridFolder(column);
 		try {
 			return SoilGridInputs.read(folder.toString());
 		} finally {
 			CaseGeoPackage.delete(folder);
 		}
-	}
-
-	/** How a point of a case is described. */
-	public enum SiteGeometry {
-		/** Slope, aspect, horizon and sky view factor of the point. */
-		CELL,
-		/** A stake on a flat field: its horizon, slope 0, V = 1. */
-		FIELD,
-		/** No slope, no horizon, V = 1. */
-		FLAT
 	}
 
 	private List<String> inputFileList() {

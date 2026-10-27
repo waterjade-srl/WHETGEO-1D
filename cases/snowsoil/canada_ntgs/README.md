@@ -24,7 +24,7 @@ JRA-3Q, GEOtop's hourly reference) are shared separately as `canada_ntgs_data.ta
 From the root of the repository:
 
 ```bash
-tar xzf canada_ntgs_data.tar.gz                               # writes geotop/ and grid/ of this case
+tar xzf canada_ntgs_data.tar.gz                               # writes geotop/ and data/canada_ntgs.gpkg of this case
 (cd cases/snowsoil/canada_ntgs && sha256sum -c DATA.sha256)   # the files these results were made with
 ```
 
@@ -38,7 +38,7 @@ python3 cases/snowsoil/canada_ntgs/compare.py      # comparison table
 
 Then open `Jupyter_Notebook/7_Canada_NTGS_Fidelity.ipynb`.
 
-`python3 make_inputs.py <sims_folder>` (or `CANADA_SIMS`) regenerates `geotop/` and `grid/` from the GEOtop runs.
+`python3 make_inputs.py <sims_folder>` (or `CANADA_SIMS`) regenerates `geotop/` and the case GeoPackage from the GEOtop runs.
 
 For sensitivity runs, `-D` overrides of the .sim go through `SIM_OPTS`, and the output goes to `output/<case>_<LABEL>/`:
 
@@ -54,11 +54,11 @@ The other overrides are `-DheatTolerance=` and `-DendDate=`.
 | Path | Content |
 |---|---|
 | `geotop/<case>/` | GEOtop's inputs: `meteo0001.txt.gz` (the original `meteo0001.txt.old`, gzipped), `soil0001.txt`, `horizon0001.txt`, `geotop.inpts`; `forcing.properties` for the forcing tools; `reference.csv.gz` (hourly reference, see below) |
-| `grid/<case>/` | the soil as WHETGEO-1D CSV inputs |
+| `data/canada_ntgs.gpkg` | the case GeoPackage: points NTGS1 and NTGS2, a column per case with its forcing set (ERA5, JR3QG), soil profiles and initial conditions |
 | `snowsoil_canada_ntgs.sim` | the OMS3 simulation, one case per run (`-Dcase=`) |
 | `run.sh`, `make_inputs.py`, `compare.py` | run, inputs, comparison |
-| `data/`, `output/` | forcing and outputs (not versioned) |
-| `DATA.sha256` | SHA-256 of `geotop/` and `grid/`, which are not versioned (see above) |
+| `data/<case>/`, `output/` | forcing and outputs (not versioned) |
+| `DATA.sha256` | SHA-256 of `geotop/` and of the GeoPackage, which are not versioned (see above) |
 
 `reference.csv.gz` holds GEOtop's hourly results:
 
@@ -75,13 +75,13 @@ The forcing is GEOtop's own, computed by the temporary fidelity tools (`GeotopFo
 |---|---|---|
 | Ta, RH, wind | step means of the meteo file, `RHmin` 10 %, `Vmin` 0.5 m s⁻¹ | 0, 5e-7, 0 |
 | pressure | 1013.25 e^(−z/8500) hPa | 0 |
-| rain, snow | `IPrec` × cos β (once), linear ramp 1 / −3 °C, no correction | 5e-7 mm |
+| rain, snow | `IPrec` per unit horizontal area (`precipitationOnSlope = false`), linear ramp 1 / −3 °C, no correction; the column counts them on its slope, × cos β once | 5e-7 mm |
 | SW beam, diffuse | on the slope from the global SW (`SlopeShortwave`) | 7e-7 W m⁻² |
 | LW in | the reanalysis column `LWin`, as it is (`longwaveInHeader`) | 0 |
 
 ### Soil
 
-- 20 layers in η: one parameter set per layer; Van Genuchten with Dall'Amico freezing; GEOtop's specific storage 1e-7 mm⁻¹.
+- From the case GeoPackage, column of the case: 20 layers in η, 13 parameter sets (12 peat layers and one mineral soil); Van Genuchten with Dall'Amico freezing; GEOtop's specific storage 1e-7 mm⁻¹.
 - Solids: λ = 2.5 W m⁻¹ K⁻¹, ρc = 2.2 MJ m⁻³ K⁻¹. Water conductivity 0.567.
 - θ comes from `InitPres` and is fixed.
 - T(0) = `InitTemp` per layer.
@@ -89,8 +89,9 @@ The forcing is GEOtop's own, computed by the temporary fidelity tools (`GeotopFo
 
 ### Snow and surface
 
-- Fidelity configuration: Cosenza snow conductivity; `MoninObukhov = 1` (both corrections); sensors at 10 m.
-- The case's keywords, through `geotopSnowParameters`: FreshSnowReflVis 0.9, NIR 0.65, AlbExtParSnow 10, IrriducibleWatSatSnow 0.02, SnowEmissiv 0.99, SnowRoughness 0.1, DrySnowDefRate 1, WetSnowDefRate 1.5, SnowDensityCutoff 100, SnowViscosity 1e6, MaxWaterEqSnowLayerContent 10, SWEbottom = SWEtop = 20, MaxSnowLayersMiddle 4, PointSlope.
+- Fidelity configuration: Cosenza snow conductivity; `MoninObukhov = 1` (both corrections).
+- Site from the case GeoPackage (point of the column): station ID, latitude, longitude, elevation, sensors at 10 m, slope 30° or 35° (precipitation on the slope, overburden of the compaction), V = 1, the one of GEOtop's run (`geotop2case --svf-of-run`; the flat horizon on the slope would give 0.93).
+- The case's keywords, through `geotopSnowParameters`: FreshSnowReflVis 0.9, NIR 0.65, AlbExtParSnow 10, IrriducibleWatSatSnow 0.02, SnowEmissiv 0.99, SnowRoughness 0.1, DrySnowDefRate 1, WetSnowDefRate 1.5, SnowDensityCutoff 100, SnowViscosity 1e6, MaxWaterEqSnowLayerContent 10, SWEbottom = SWEtop = 20, MaxSnowLayersMiddle 4.
 - Ground albedo 0.2, GEOtop's default.
 
 ### Fallbacks and what is not mapped

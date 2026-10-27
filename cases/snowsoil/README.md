@@ -200,7 +200,8 @@ The column runs in a `.sim` next to GEOframe components; what has been tried so 
 
     Its outputs `outShortwaveDirect`, `outShortwaveDiffuse`, `outCosIncidence` and `outCloudTransmissivity` go to the column's inputs of the same name.
   - **Low sun.** With a measured global shortwave and the sun too low for a τ_c, the measurement goes to the diffuse. GEOtop instead takes the clear sky times its daily τ_c there, so the season's diffuse differs by about 3 % on Matsch_P2_Ref_007; the beam is the same.
-  - **Geometry.** `siteGeometry` = `cell` (default): slope, aspect, horizon and V of the point. V is computed from the horizon and the slope (`Horizon.skyViewFactor`, Dozier and Frew 1990) where the file has none. `flat` and `field` (horizon only) are for internal checks.
+  - **Geometry.** Always the one of the point: slope, aspect, horizon and V. V is computed from the horizon and the slope (`Horizon.skyViewFactor`, Dozier and Frew 1990) where the file has none. A run in other conditions (flat, say) is another case, not an option.
+  - **Forcing sets.** The series are keyed by point (`value_<point id>`), as GEOframe's by station. A place driven by several forcing sets (two reanalyses) is one point with a column per set; the column names its set in `columns.forcing`, and each set has its own tables (`tools/geotop2case --forcing`).
 - **ShortWaveRadiationBalance of GEOframe: not linked.** The point case runs on the Friuli DEM once ported to the current hortonmachine (imports, two calls, a `TOWGS84` in the `.prj`). It lacks what `TerrainShortwaveMain` does:
   - a cloud transmissivity on a slope (it gives only the clear sky);
   - the longitude in the hour angle;

@@ -9,11 +9,18 @@
  *
  * Forcing: data/<case>/*.csv, hourly, written by run.sh with the temporary
  * fidelity tools (GeotopForcingFiles) from GEOtop's own input files, as GEOtop
- * steps and computes them: precipitation x cos(slope) once and split on
- * 1 / -3 degC, shortwave on the slope, the reanalysis longwave as it is, the
+ * steps and computes them: precipitation per unit horizontal area split on
+ * 1 / -3 degC (the column counts it on its slope), shortwave on the slope, the reanalysis longwave as it is, the
  * pressure of the standard atmosphere at the site. Bare soil: GEOtop's
  * Tsurface as a Dirichlet top (fallback: no bare-soil energy balance in the
  * column).
+ *
+ * Site, sensors and soil from the case GeoPackage data/canada_ntgs.gpkg
+ * (make_inputs.py, tools/geotop2case): two points, NTGS1 and NTGS2, and a
+ * column per case, 1-4 as NTGS1_ERA5, NTGS1_JR3QG, NTGS2_ERA5, NTGS2_JR3QG.
+ * The column is on the slope of its point (30 or 35 degrees, north), which
+ * counts the precipitation per unit area of the slope and reduces the
+ * overburden of the compaction; V = 1, the one of GEOtop's run.
  *
  * Soil: the 20 layers of soil0001.txt to 9.03 m in eta, one parameter set per
  * layer, Dall'Amico freezing, theta from GEOtop's InitPres kept fixed
@@ -23,12 +30,9 @@
 import oms3.SimBuilder as OMS3
 
 def caseName  = System.getProperty("case") ?: "NTGS1_ERA5"
-def site      = caseName.substring(0, 5)
-// latitude, longitude, elevation, slope of the sites (siti.py); one line each: the OMS preprocessor reads def lines one by one
-def latitude  = ["NTGS1": 68.538402, "NTGS2": 68.537861][site]
-def longitude = ["NTGS1": -133.773038, "NTGS2": -133.762289][site]
-def elevation = ["NTGS1": 96.0, "NTGS2": 107.0][site]
-def slope     = ["NTGS1": 30.0, "NTGS2": 35.0][site]
+// column of the case GeoPackage; one line each: the OMS preprocessor reads def lines one by one
+def column    = ["NTGS1_ERA5": 1, "NTGS1_JR3QG": 2, "NTGS2_ERA5": 3, "NTGS2_JR3QG": 4][caseName]
+def gpkg      = "$oms_prj/data/canada_ntgs.gpkg"
 def startDate = "2020-09-01 01:00"
 def endDate   = System.getProperty("endDate") ?: "2023-09-01 00:00"
 def timestep  = 60
@@ -154,9 +158,6 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.configuration"          "fidelity"
             // heat only: theta of GEOtop's initial pressure, fixed (WaterBalance = 0)
             "snowsoil.soilWaterMode"          "Fixed"
-            // MeteoStationWindVelocitySensorHeight, MeteoStationTemperatureSensorHeight
-            "snowsoil.windHeight"             10.0
-            "snowsoil.temperatureHeight"      10.0
             "snowsoil.thinSnowRegime"         thinSnowRegime
             "snowsoil.porosityCap"            porosityCap
             "snowsoil.faceConductance"        faceConductance
@@ -169,30 +170,25 @@ new OMS3().sim(name: "snowsoil_canada_ntgs") {
             "snowsoil.alphaSnow"              alphaSnow
             "snowsoil.maxSnowCells"           10
             // the case's snow keywords of geotop.inpts (GeotopSnowParameters)
-            "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.9, FreshSnowReflNIR=0.65, AlbExtParSnow=10, IrriducibleWatSatSnow=0.02, SnowEmissiv=0.99, SnowRoughness=0.1, DrySnowDefRate=1, WetSnowDefRate=1.5, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=20, SWEtop=20, MaxSnowLayersMiddle=4, PointSlope=${slope}"
+            "snowsoil.geotopSnowParameters"   "FreshSnowReflVis=0.9, FreshSnowReflNIR=0.65, AlbExtParSnow=10, IrriducibleWatSatSnow=0.02, SnowEmissiv=0.99, SnowRoughness=0.1, DrySnowDefRate=1, WetSnowDefRate=1.5, SnowDensityCutoff=100, SnowViscosity=1e6, MaxWaterEqSnowLayerContent=10, SWEbottom=20, SWEtop=20, MaxSnowLayersMiddle=4"
             // soil albedos not set in geotop.inpts: GEOtop's default 0.2 (parameters.cc:1266)
             "snowsoil.groundAlbedo"             0.2
             "snowsoil.groundAlbedoNearInfrared" 0.2
             // GEOtop's thermal conductivity of water
             "snowsoil.thermalConductivityWater" 0.567
 
-            // site
-            "snowsoil.stationID"              1
-            "snowsoil.latitude"               latitude
-            "snowsoil.longitude"              longitude
+            // site (station ID, latitude, longitude, elevation, sensor heights) and soil: column n of the case
+            "snowsoil.caseFile"               gpkg
+            "snowsoil.caseColumn"             column
             "snowsoil.standardTime"           0.0
-            "snowsoil.elevation"              elevation
             "snowsoil.tTimeStep"              3600.0
-
-            // soil: the 20 layers of soil0001.txt (grid/<case>, written by make_inputs.py)
-            "snowsoil.soilGridFile"           "$oms_prj/grid/${caseName}"
 
             // bare soil at GEOtop's Tsurface (fallback); zero heat flux at the bottom (BottomBoundaryHeatFlux = 0)
             "snowsoil.bareSoilTopType"        "Dirichlet"
             "snowsoil.bottomBCType"           "Bottom Neumann"
             "snowsoil.bottomBCValue"          0.0
 
-            "snowsoil.inputFiles"             "$oms_prj/geotop/${caseName}/forcing.properties,$oms_prj/geotop/${caseName}/meteo0001.txt.gz,$oms_prj/geotop/${caseName}/soil0001.txt,$oms_prj/geotop/${caseName}/reference.csv.gz"
+            "snowsoil.inputFiles"             "${gpkg},$oms_prj/geotop/${caseName}/forcing.properties,$oms_prj/geotop/${caseName}/meteo0001.txt.gz,$oms_prj/geotop/${caseName}/soil0001.txt,$oms_prj/geotop/${caseName}/reference.csv.gz"
             "snowsoil.outputPath"             "$oms_prj/output/${caseName}${label}"
             "snowsoil.outputInterval"         3600.0
             "snowsoil.outputStandardTime"     0.0

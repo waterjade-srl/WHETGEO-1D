@@ -20,8 +20,14 @@ package org.geoframe.whetgeo1d.io.snowsoil;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 
 import org.geoframe.whetgeo1d.core.snowsoil.forcing.Horizon;
 import org.junit.Test;
@@ -94,6 +100,31 @@ public class CaseGeoPackageTest {
 			v[i] = g.parameterID[i] > 0 ? bySet[g.parameterID[i]] : Double.NaN;
 		}
 		return v;
+	}
+
+	/**
+	 * The forcing set of a column: null in a case without the column
+	 * {@code forcing}; read where a case has several sets at the same point.
+	 */
+	@Test
+	public void forcingSets() throws Exception {
+		assertNull(file(MATSCH, "matsch_p2_ref_007").column(1).forcing());
+		Path copy = Files.createTempFile("case", ".gpkg");
+		try {
+			Files.copy(Path.of(MATSCH + "data/matsch_p2_ref_007.gpkg"), copy, StandardCopyOption.REPLACE_EXISTING);
+			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy); Statement s = c.createStatement()) {
+				s.execute("ALTER TABLE columns ADD COLUMN forcing TEXT");
+				s.execute("UPDATE columns SET forcing = 'ERA5'");
+				s.execute("INSERT INTO columns (id, point_id, profile_id, ic_id, forcing) VALUES (2, 1, 1, 1, 'JRA3Q')");
+			}
+			CaseGeoPackage f = new CaseGeoPackage(copy);
+			assertEquals("ERA5", f.column(1).forcing());
+			CaseGeoPackage.Column second = f.column(2);
+			assertEquals("JRA3Q", second.forcing());
+			assertEquals(1, second.pointId());
+		} finally {
+			Files.delete(copy);
+		}
 	}
 
 	/** The svf stored by geotop2case (Python) and the one computed here from the same horizon agree. */
