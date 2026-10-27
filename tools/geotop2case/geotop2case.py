@@ -133,6 +133,8 @@ SERIES = [
     ("shortwaveGlobal", "HeaderSWglobal", lambda v, h: v),
     ("longwaveIn", "HeaderLWin", lambda v, h: v),
 ]
+# series the column cannot run without (cases/snowsoil/README.md, Forcing)
+REQUIRED = ("airTemperature", "relativeHumidity", "windSpeed")
 
 
 def undefined(v):
@@ -404,6 +406,10 @@ class Run:
         end = end - datetime.timedelta(hours=st) if end else None
         columns = [(name, header.index(k.string(h).lower()), f) for name, h, f in SERIES
                    if k.string(h) and k.string(h).lower() in header]
+        for name, h, _ in SERIES:
+            if k.string(h) and k.string(h).lower() not in header:
+                print(f"warning: {path}: {h} = {k.string(h)} has no column in the file, {name} not written",
+                      file=sys.stderr)
         di = header.index(date.lower())
         out = {name: {} for name, _, _ in columns}
         previous = None
@@ -601,6 +607,10 @@ def main(argv=None):
         attributes(con, "provenance", ["key", "value"], prov, ["TEXT", "TEXT"], "where the data come from")
     if a.series:
         for forcing, tables in series.items():
+            missing = [n for n in REQUIRED if n not in tables]
+            if missing:
+                print(f"warning: no {', '.join(missing)}" + (f" in forcing set {forcing}" if forcing else "")
+                      + ": SnowSoilSolver1DMain needs it, give it before running the column", file=sys.stderr)
             ids = sorted(set().union(*(t.keys() for t in tables.values())))
             write_series(a.series if forcing is None else os.path.join(a.series, forcing), tables, ids)
     print(gpd.read_file(a.out, layer="points").drop(columns="geometry").to_string(index=False))

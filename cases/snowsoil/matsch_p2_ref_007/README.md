@@ -25,7 +25,7 @@ cases/snowsoil/matsch_p2_ref_007/run.sh forcing  # only the forcing
 cases/snowsoil/matsch_p2_ref_007/run.sh seb      # forcing and the run with the bare-soil energy balance (output_seb/)
 ```
 
-Then open the comparison notebook, `Jupyter_Notebook/6_Matsch_P2_Ref_007_Fidelity.ipynb`.
+Then open the comparison notebook, `Jupyter_Notebook/6_Matsch_P2_Ref_007_Fidelity.ipynb`: it reads both runs, so run `run.sh` and `run.sh seb` first. It needs Jupyter (or run its cells as a script from `Jupyter_Notebook/`, which holds the helper module `WHETGEO1D_SnowSoilOutputs.py`).
 
 The run needs JDK 21, Maven (offline works) and `oms-3.5.12.jar` in the local Maven repository (`OMS_JAR` overrides it).
 
@@ -33,7 +33,7 @@ The run needs JDK 21, Maven (offline works) and `oms-3.5.12.jar` in the local Ma
 
 | Path | Content |
 |---|---|
-| `geotop/` | the corrected GEOtop 3.0 run without canopy, produced by `casi/Matsch_P2_Ref_007/run.sh corretta` of the GEO2GEO workspace (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, Date only, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt` (GEOtop's cloudiness diagnostics, cut to the period of the run); `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `5fae8eba…` |
+| `geotop/` | the corrected GEOtop 3.0 run without canopy: the official test with the changes listed above (binary sha256 `6a65968f…09c`, GEOtop commit 1f1fc5af). It holds: `geotop.inpts`; `meteo0001.txt` (the corrected input, Date only, October 2009 only); `meteo0001_cloud_filled_by_geotop.txt` (the same file with the cloudiness GEOtop computed and wrote back into it); `clouds.txt` (GEOtop's cloudiness diagnostics, cut to the period of the run); `horizon0001.txt`; `soil0001.txt`; and the outputs in `output-tabs/` (snow layer files cut to L1–L5). `point0001.txt` sha256: `5fae8eba…` |
 | `forcing.properties` | the case's settings for the forcing tools |
 | `data/` | OMS CSV forcing at 900 s, written by `run.sh` (`GeotopForcingFiles`), not versioned; `matsch_p2_ref_007.gpkg`, the case GeoPackage (`make_case.sh`) |
 | `grid/` | the soil as WHETGEO-1D CSV inputs |
@@ -88,7 +88,21 @@ The soil and its conditions:
 
 ## Result
 
-Both runs take 3068 steps, every heat solve converges, and each runs in about 10 s. The full comparison against the VAL-1 tolerances, approved on 22 October 2026, is in the notebook.
+Both runs take 3068 steps, every heat solve converges, and each runs in about 10 s. The full comparison is in the notebook.
+
+**The VAL-1 tolerances** (approved on 22 October 2026; the same table is in the notebook):
+
+| Quantity | Tolerance |
+|---|---|
+| snow depth RMSE / max \|diff\| | 2 mm / 5 mm |
+| SWE RMSE | 0.2 mm |
+| SWE peak, melt total, snow runoff total | 10 % |
+| surface temperature with snow, RMSE | 0.5 K |
+| surface fluxes with snow, RMSE | 5 W m⁻² |
+| soil temperature bias / RMSE, every depth | 0.1 K / 0.2 K |
+| θ liquid RMSE | 0.01 |
+| θ ice max, top cell | 0.02 |
+| maximum frost depth | same cell |
 
 GEOtop's `soilTz` here is its `SoilAveragedTempProfileFile`, the soil temperature averaged over the hour, and its point `Tsurface` is an hourly mean too. The column's `soilTzav.csv` and `Tsurface` are the matching means, so the comparison uses them. An earlier comparison used end-of-hour temperatures and showed a "faster thaw" of the top cells; that was this mismatch, not physics.
 

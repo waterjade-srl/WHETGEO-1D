@@ -15,7 +15,7 @@ Preview of the GEO2GEO prototype for Rigonian Lab: a snow and frozen-soil column
   - `tools/caseedit` adds named grids (built by GEOframe's `WHETGEO1D_GridCreator`) and initial snow (one layer as GEOtop's `InitSWE`, or layers from a pit).
   - `CaseGeoPackage` checks that a case holds together.
   - A run picks column, grid and initial condition (`caseColumn`, `caseGrid`, `caseInitialCondition`). The geometry is always the true one of the point.
-- **Cases** (`cases/snowsoil/`): a synthetic season; Matsch_P2_Ref_007 and ARF_1D from GEOtop's official tests; Friuli (four FVG stations, 2025–26) and the NTGS1/NTGS2 boreholes near Inuvik, whose data are shared separately.
+- **Cases** (`cases/snowsoil/`): a synthetic season; Matsch_P2_Ref_007 and ARF_1D from GEOtop's official tests; Friuli (four FVG stations, 2025–26) and the NTGS1/NTGS2 boreholes near Inuvik, whose data are shared separately, together with the GEOtop 3.0 runs they come from (`geotop_runs.tar.gz`).
 - **Notebooks**: 5 (reading the outputs), 6 (Matsch), 7 (Canada); `friuli_comparison.ipynb`.
 - **Tests**: 338 JUnit tests, among them Neumann's and Lunardini's analytic solutions (VAL-6) and constructed cases (VAL-4); golden baseline of the soil solvers; snow regression on one ARF_1D season. CI on Linux, macOS and Windows (VAL-5, proposed).
 

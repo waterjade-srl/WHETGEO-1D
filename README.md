@@ -17,13 +17,13 @@ The branch `geo2geo` of this fork carries the prototype of the GEO2GEO project: 
 
 ## Getting started
 
-You need JDK 21 and Maven; Python 3 with numpy, pandas and matplotlib for the comparison scripts and notebooks, and geopandas and pyproj for the case tools.
+You need JDK 21 and Maven; Python 3 with numpy, pandas and matplotlib for the comparison scripts, Jupyter for the notebooks, and geopandas and pyproj for the case tools.
 
 ```bash
 git clone -b geo2geo https://github.com/waterjade-srl/WHETGEO-1D.git
 cd WHETGEO-1D
 mvn -q test                                   # online the first time: it fetches the dependencies; ~5 min of tests
-mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt   # the classpath of the scripts below
+mvn -q dependency:build-classpath -Dmdep.outputFile=target/cp.txt   # the classpath of the java commands (the run scripts write it too)
 cases/snowsoil/matsch_p2_ref_007/run.sh       # a month at Matsch P2 in the fidelity configuration, ~10 s
 ```
 
@@ -35,9 +35,9 @@ After the first online build every script works offline. Then:
 |---|---|
 | run the cases, set the options, read the outputs | [`cases/snowsoil/README.md`](cases/snowsoil/README.md), the user guide |
 | run Friuli and the Canadian boreholes | their READMEs, *Getting the data*: the data are shared separately |
-| make a case from your own GEOtop 3.0 point run | [`tools/geotop2case`](tools/geotop2case/README.md) |
+| make a case from your own GEOtop 3.0 point run | [`tools/geotop2case`](tools/geotop2case/README.md); the GEOtop runs of Friuli and Canada are shared as `geotop_runs.tar.gz`, with the case data |
 | add grids of the soil or an initial snowpack to a case | [`tools/caseedit`](tools/caseedit/README.md) |
-| check that a case holds together | `java -cp target/classes:$(cat cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` |
+| check that a case holds together | `java -cp target/classes:$(cat target/cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` |
 | check that a change keeps the results | `tools/snow_regression.sh` and `tools/golden_baseline.sh` |
 
 The prototype is a work in progress: options, inputs and outputs may still change. Comments and problems: the Issues of this fork.

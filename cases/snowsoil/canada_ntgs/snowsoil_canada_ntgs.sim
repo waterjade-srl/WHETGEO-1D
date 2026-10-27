@@ -1,8 +1,7 @@
 /*
  * Canadian case NTGS1 / NTGS2 x ERA5 / JRA-3Q (phase 2.1): the snow+soil column in
  * the fidelity configuration, heat only, against GEOtop 3.0 without canopy,
- * corrected (casi/Canada_NTGS/sims/<case>_senza_chioma_corretta of the GEO2GEO
- * workspace). See README.md.
+ * corrected (canada/<case> of the shared geotop_runs.tar.gz). See README.md.
  *
  * One case per run, chosen with -Dcase=NTGS1_ERA5 (default), NTGS1_JR3QG,
  * NTGS2_ERA5 or NTGS2_JR3QG; run.sh writes the forcing and runs the four.

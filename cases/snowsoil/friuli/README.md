@@ -150,7 +150,7 @@ explain it: part of the gap is in the energy balance.
 reads no GEOtop file. Each station is on its terrain: slope, aspect, horizon, and a sky view factor V computed
 from them.
 
-**Static inputs: one GeoPackage, `data/friuli.gpkg`**, written by `make_case.sh` with `tools/geotop2case` from the GEOtop 3.0 runs of the stations on their terrain (`FRIULI_GT3`). The time series stay in `data/*.csv`.
+**Static inputs: one GeoPackage, `data/friuli.gpkg`**, written by `make_case.sh` with `tools/geotop2case` from the GEOtop 3.0 runs of the stations on their terrain (`FRIULI_RUNS`: `friuli/` of the shared `geotop_runs.tar.gz`). The time series stay in `data/*.csv`.
 
 | Layer or table | Content |
 |---|---|

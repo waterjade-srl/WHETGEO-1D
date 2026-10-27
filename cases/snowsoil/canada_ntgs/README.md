@@ -5,7 +5,7 @@ This case runs the snow+soil column on the two NTGS boreholes near Inuvik (NWT, 
 - the *fidelity* configuration;
 - soil water fixed (`soilWaterMode = Fixed`, as GEOtop's `WaterBalance = 0`).
 
-**Reference.** GEOtop 3.0 without canopy, corrected, of the GEO2GEO workspace (`casi/Canada_NTGS/sims/<site>_<forcing>_senza_chioma_corretta`). That run has:
+**Reference.** GEOtop 3.0 without canopy, corrected: the runs in `canada/` of `geotop_runs.tar.gz`, shared with the case data (Getting the data). That run has:
 
 - `ActualOrProjectedArea = 1`, so precipitation × cos β once;
 - `LWin` from the reanalysis;
@@ -38,7 +38,7 @@ python3 cases/snowsoil/canada_ntgs/compare.py      # comparison table
 
 Then open `Jupyter_Notebook/7_Canada_NTGS_Fidelity.ipynb`.
 
-`python3 make_inputs.py <sims_folder>` (or `CANADA_SIMS`) regenerates `geotop/` and the case GeoPackage from the GEOtop runs.
+`python3 make_inputs.py <sims_folder>` (or `CANADA_SIMS`) regenerates `geotop/` and the case GeoPackage from the GEOtop runs (`geotop_runs/canada` of the shared `geotop_runs.tar.gz`).
 
 For sensitivity runs, `-D` overrides of the .sim go through `SIM_OPTS`, and the output goes to `output/<case>_<LABEL>/`:
 

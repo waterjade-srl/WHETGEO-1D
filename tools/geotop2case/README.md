@@ -40,6 +40,8 @@ It reads what GEOtop 3.0 reads, with GEOtop's precedence and defaults:
 - **`columns`** (with `forcing`, NULL without `--forcing`) and **`provenance`**, with the SHA-256 of every file read.
 - **`snow_initial`:** GEOtop's `InitSWE`, `InitSnowDensity`, `InitSnowTemp` and `InitSnowAge` (defaults 200 kg m⁻³, −3 °C, 0 d) for the runs with `InitSWE` > 0, by initial condition.
 - Named grids and pit profiles of the snow are added afterwards with `tools/caseedit`.
+- **Warnings** (on stderr): a meteo column declared in `geotop.inpts` but absent from the file (that series is not written), and, with `--series`, a series the column cannot run without (air temperature, relative humidity, wind). `CaseGeoPackage`'s check covers the static part of the case only.
+- **No `.sim` is written**: start from `cases/snowsoil/friuli/snowsoil_friuli_terrain.sim` and change the case file, the series folder, the dates and the readers of the series the case has.
 - **Time series (`--series`):** in UTC.
   - Precipitation is the intensity times the interval to the previous record.
   - The files are read from `meteo0001.txt.old` when a GEOtop run left one, because GEOtop rewrites the file it read without some of its columns.
