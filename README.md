@@ -13,15 +13,34 @@ Hoping that WHETGEO will whet your interest.
 
 # geo2geo prototype
 
-The branch `geo2geo` of this fork carries the prototype of the GEO2GEO project: GEOtop 3.0's snow model ported into WHETGEO-1D, for 1D columns. The OMS3 component `SnowSoilSolver1DMain` solves the heat of snow and soil as one system, with Richards' equation and frozen soil under the snow. It has two configurations: *fidelity* (GEOtop 3.0's options) and *recommended* (the set proposed in the design).
+The branch `geo2geo` of this fork carries the prototype of the GEO2GEO project: GEOtop 3.0's snow model ported into WHETGEO-1D, for 1D columns. The OMS3 component `SnowSoilSolver1DMain` solves the heat of snow and soil as one system, with Richards' equation and frozen soil under the snow. It has two configurations: *fidelity* (GEOtop 3.0's options) and *recommended* (the set proposed in the design). What this version holds, what has been checked and what is known not to work yet: [RELEASE_NOTES_GEO2GEO.md](RELEASE_NOTES_GEO2GEO.md).
 
-- [`cases/snowsoil/README.md`](cases/snowsoil/README.md): user guide (build, run, options, outputs, coupling with other GEOframe components) and the cases.
-- [`tools/geotop2case`](tools/geotop2case/README.md): the case GeoPackage and the OMS series from a GEOtop 3.0 point run.
-- `tools/snow_regression.sh` and `tools/golden_baseline.sh`: the snow regression and the golden baseline.
+## Getting started
 
-The data of the Friuli and Canadian cases are not in the repository; their READMEs say how to get them.
+You need JDK 21 and Maven; Python 3 with numpy, pandas and matplotlib for the comparison scripts and notebooks, and geopandas and pyproj for the case tools.
 
-The prototype is a work in progress: options, inputs and outputs may still change.
+```bash
+git clone -b geo2geo https://github.com/waterjade-srl/WHETGEO-1D.git
+cd WHETGEO-1D
+mvn -q test                                   # online the first time: it fetches the dependencies; ~5 min of tests
+mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt   # the classpath of the scripts below
+cases/snowsoil/matsch_p2_ref_007/run.sh       # a month at Matsch P2 in the fidelity configuration, ~10 s
+```
+
+The comparison with GEOtop 3.0 is in `Jupyter_Notebook/6_Matsch_P2_Ref_007_Fidelity.ipynb`.
+
+After the first online build every script works offline. Then:
+
+| To | Read |
+|---|---|
+| run the cases, set the options, read the outputs | [`cases/snowsoil/README.md`](cases/snowsoil/README.md), the user guide |
+| run Friuli and the Canadian boreholes | their READMEs, *Getting the data*: the data are shared separately |
+| make a case from your own GEOtop 3.0 point run | [`tools/geotop2case`](tools/geotop2case/README.md) |
+| add grids of the soil or an initial snowpack to a case | [`tools/caseedit`](tools/caseedit/README.md) |
+| check that a case holds together | `java -cp target/classes:$(cat cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` |
+| check that a change keeps the results | `tools/snow_regression.sh` and `tools/golden_baseline.sh` |
+
+The prototype is a work in progress: options, inputs and outputs may still change. Comments and problems: the Issues of this fork.
 
 # Contributing
 Your contributions are always welcome! Please take a look at the [contribution guidelines first](http://geoframe.blogspot.com/2020/05/geoframe-community-publication-policy.html).

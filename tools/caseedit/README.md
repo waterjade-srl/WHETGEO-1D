@@ -10,7 +10,7 @@ python3 tools/caseedit/caseedit.py snow case.gpkg --ic 1 --layers pit.csv [--age
 python3 tools/caseedit/caseedit.py snow case.gpkg --ic 1 --none
 ```
 
-Then check the case: `java -cp target/classes:$(cat target/cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` prints what does not hold together, and exits with 1 if anything does not. The component runs the same checks it needs at the start of a run.
+Then check the case: `java -cp target/classes:$(cat cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` prints what does not hold together, and exits with 1 if anything does not (`cp.txt`: see the build in the user guide). The component itself stops at the start of a run on what it cannot use.
 
 ## Grids
 
