@@ -25,6 +25,8 @@ for s in $STATIONS; do
   java -Dstation="$s" -Dstability="${STABILITY:-}" -DshortwavePenetration="${SW:-}" -DsnowConductivity="${K:-}" -DalphaSnow="${ALPHA:-}" -Doms.prj="$CASE" -cp "$OMS:target/classes:$(cat target/cp.txt)" \
        oms3.CLI -r "$CASE/snowsoil_friuli.sim" > "$log" 2>&1
   end=$(date +%s.%N)
+  # oms3.CLI may exit with 0 even on an error
+  if grep -q ">>>> Error" "$log"; then echo "station $s failed, see $log" >&2; exit 1; fi
   printf 'station %s: %.1f s, %s\n' "$s" "$(echo "$end - $start" | bc)" \
          "$(grep "snowsoil: .* steps," "$log" || true)"
 done

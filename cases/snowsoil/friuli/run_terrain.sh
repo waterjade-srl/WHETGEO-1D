@@ -3,7 +3,8 @@
 # from the root of the repository.
 #   cases/snowsoil/friuli/run_terrain.sh
 #   COLUMNS="1 4" cases/snowsoil/friuli/run_terrain.sh      (rows of the columns table of data/friuli.gpkg)
-# Writes output/terrain/station_<n>/ (NetCDF, GEOtop-like CSV) and .../run.log.
+#   K=Sturm_1997 cases/snowsoil/friuli/run_terrain.sh       (sensitivity runs: K, STABILITY, SW, ALPHA as run_all.sh)
+# Writes output/terrain[_<label>]/station_<n>/ (NetCDF, GEOtop-like CSV) and .../run.log.
 set -euo pipefail
 export LC_NUMERIC=C
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -16,10 +17,12 @@ trap 'find . -maxdepth 2 -path "./snowsoil_*" -type d -empty -delete' EXIT
 mvn -q -o compile dependency:build-classpath -Dmdep.outputFile=target/cp.txt
 CP="target/classes:$(cat target/cp.txt)"
 for s in ${COLUMNS:-1 2 3 4}; do
-  out="$CASE/output/terrain/station_$s"
+  label="${ALPHA:+_alpha_$ALPHA}${STABILITY:+_${STABILITY// /_}}${SW:+_sw_${SW,,}}${K:+_k_${K,,}}"
+  out="$CASE/output/terrain${label,,}/station_$s"
   mkdir -p "$out"
   start=$(date +%s.%N)
-  java -Dcolumn="$s" -Doms.prj="$CASE" -cp "$OMS:$CP" \
+  java -Dcolumn="$s" -Dstability="${STABILITY:-}" -DshortwavePenetration="${SW:-}" -DsnowConductivity="${K:-}" \
+       -DalphaSnow="${ALPHA:-}" -Doms.prj="$CASE" -cp "$OMS:$CP" \
        oms3.CLI -r "$CASE/snowsoil_friuli_terrain.sim" > "$out/run.log" 2>&1
   # oms3.CLI exits with 0 even on an error
   if grep -q ">>>> Error" "$out/run.log"; then echo "station $s failed, see $out/run.log" >&2; exit 1; fi

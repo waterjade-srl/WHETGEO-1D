@@ -2,6 +2,9 @@
 """Snow depth of the Friuli case: the porting (recommended configuration) against the observations,
 GEOtop 3.0 (flat and with topography) and the MobyGIS-GEOtop run, per station.
 
+It reads every run of the porting in output/: the flat column (run_all.sh) and its sensitivity runs
+(output/station_<n>_<label>/), the column on the terrain (run_terrain.sh, output/terrain[_<label>]/).
+
 Used by friuli_comparison.ipynb; also runnable as a script:
 
     python3 compare.py [geotop3_folder] [mobygis_output_tabs]
@@ -18,6 +21,7 @@ FRIULI_GT3 and FRIULI_MOBYGIS do the same. The porting on the terrain of the sta
 prints instead the effect of each terrain term, the porting and GEOtop 3.0 side by side: snow depth
 RMSE and melt-out against the observation, peak SWE, and the seasonal means of SWnet and LWnet.
 """
+import glob
 import os
 import sys
 
@@ -68,16 +72,21 @@ def load(gt3=None, mobygis=None):
     for s in STATIONS:
         h = {"observed": obs[s]}
         w = {}
-        runs = {"porting": os.path.join(HERE, "output", "station_%d" % s, "point.csv"),
-                "porting, unstable only": os.path.join(HERE, "output", "station_%d_unstable_only" % s,
-                                                       "point.csv"),
-                "porting, compounded shortwave penetration": os.path.join(HERE, "output",
-                                                                          "station_%d_sw_compounded" % s,
-                                                                          "point.csv"),
+        # the flat column of run_all.sh and its sensitivity runs (output/station_<n>_<label>/), the column on the
+        # terrain of run_terrain.sh and its sensitivity runs (output/terrain[_<label>]/station_<n>/)
+        runs = {"porting": os.path.join(HERE, "output", "station_%d" % s, "point.csv")}
+        for d in sorted(glob.glob(os.path.join(HERE, "output", "station_%d_*" % s))):
+            if os.path.isdir(d):
+                runs["porting, " + os.path.basename(d)[len("station_%d_" % s):].replace("_", " ")] = \
+                    os.path.join(d, "point.csv")
+        for d in sorted(glob.glob(os.path.join(HERE, "output", "terrain*", "station_%d" % s))):
+            label = os.path.basename(os.path.dirname(d))[len("terrain"):].lstrip("_").replace("_", " ")
+            runs["porting on the terrain" + (", " + label if label else "")] = os.path.join(d, "point.csv")
+        runs.update({
                 "GEOtop 3.0 flat": os.path.join(gt3, "piano", FOLDERS[s], "output-tabs", "point0001.txt"),
                 "GEOtop 3.0 topography": os.path.join(gt3, "topografia", FOLDERS[s], "output-tabs",
                                                       "point0001.txt"),
-                "MobyGIS": os.path.join(mobygis, "point%04d.txt" % s)}
+                "MobyGIS": os.path.join(mobygis, "point%04d.txt" % s)})
         for v, folder in TERRAIN.items():
             runs["porting " + v] = os.path.join(HERE, "output", "topography", v, "station_%d" % s, "run",
                                                 "point.csv")

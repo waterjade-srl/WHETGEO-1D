@@ -26,21 +26,25 @@ Identifiers such as COL-3, SNOW-2, VAL-1 refer to the decisions of the project's
 
 ```bash
 mvn -q test                                                  # all tests (online the first time)
-mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt   # classpath for the java commands below
+mvn -q dependency:build-classpath -Dmdep.outputFile=target/cp.txt   # classpath for the java commands below
 cases/snowsoil/matsch_p2_ref_007/run.sh                      # fidelity case against GEOtop 3.0 (~10 s)
-cases/snowsoil/friuli/run_all.sh [1 2 3 4]                   # Friuli, flat column; K=Sturm_1997, ALPHA=1e3, ... for sensitivity runs
-cases/snowsoil/friuli/run_terrain.sh                         # Friuli on the terrain of the stations (the operational run)
-python3 cases/snowsoil/friuli/compare.py                     # Friuli: snow depth of the run_all.sh runs against the observations
+cases/snowsoil/friuli/run_terrain.sh                         # Friuli on the terrain of the stations: the operational run (output/terrain/)
+cases/snowsoil/friuli/run_all.sh [1 2 3 4]                   # Friuli as a flat column, for comparison (output/station_<n>/)
+K=Sturm_1997 cases/snowsoil/friuli/run_terrain.sh            # a sensitivity run (K, STABILITY, SW, ALPHA; also with run_all.sh), its own output folder
+python3 cases/snowsoil/friuli/compare.py                     # Friuli: every run in output/ against the observed snow depth
 cases/snowsoil/canada_ntgs/run.sh && python3 cases/snowsoil/canada_ntgs/compare.py
-java -cp target/classes:$(cat cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg   # check a case
+java -cp target/classes:$(cat target/cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg   # check a case
 tools/snow_regression.sh                                     # snow regression (one ARF_1D season, bit for bit)
 tools/golden_baseline.sh                                     # golden baseline of the soil solvers
 python3 -m pytest -q tools/geotop2case
 ```
 
-- `oms3.CLI` exits with 0 even when the run fails: look for `>>>> Error` in the log.
-- The data of Friuli and of the Canadian boreholes are not in the repository: each README, *Getting the data*, says how to get them and how to check them (`sha256sum -c DATA.sha256`).
-- Every output starts with a header: code version, configuration, options changed, SHA-256 of the inputs. Read it to know what a run was.
+- `oms3.CLI` may exit with 0 when a run fails: the run scripts look for `>>>> Error` in the log, and so should you.
+- The data of Friuli and of the Canadian boreholes are not in the repository: each README, *Getting the data*, says how to get them and how to check them (`sha256sum -c DATA.sha256`). The GEOtop 3.0 runs they come from are shared as `geotop_runs.tar.gz` (`canada/`, `friuli/`): inputs and GEOtop's outputs, ready for `tools/geotop2case`.
+- Every output starts with a header: code version, configuration, every option as resolved (defaults included), SHA-256 of the inputs. Compare the headers of two runs to see what changed.
+- The VAL-1 tolerances against GEOtop are in `cases/snowsoil/matsch_p2_ref_007/README.md` (*Result*) and notebook 6; the notebooks need Jupyter, or can be run as scripts from `Jupyter_Notebook/`.
+- `CaseGeoPackage` checks the static part of a case only. That the series a run needs exist (air temperature, relative humidity and wind are required) is checked by `geotop2case`, which warns, and by the component when it starts.
+- A run on a new case needs a `.sim`: start from `cases/snowsoil/friuli/snowsoil_friuli_terrain.sim` (a case GeoPackage, OMS series, shortwave on the terrain) and change the case file, the series folder, the dates and the readers of the series the case has.
 
 ## Rules
 

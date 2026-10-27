@@ -2,8 +2,8 @@
 """Inputs of the Canadian case (NTGS1, NTGS2 x ERA5, JRA-3Q) from the GEOtop 3.0 runs.
 
 The reference is GEOtop 3.0 without canopy, corrected:
-    <sims>/<site>_<forcing>_senza_chioma_corretta/
-These runs are written by build.py and run.sh of casi/Canada_NTGS in the GEO2GEO workspace.
+    <sims>/<site>_<forcing>/   (canada/ of geotop_runs.tar.gz, shared with the case data; README.md)
+or, in the project's own folders, <sims>/<site>_<forcing>_senza_chioma_corretta/.
 
 For each of the four cases this writes geotop/<site>_<forcing>/ with the following files.
 
@@ -124,13 +124,21 @@ geotopPointFile = reference.csv
 """ % (lat, lon, z, slope, aspect, POINT_ID[site], os.path.basename(out)))
 
 
+def run_folder(sims, case):
+    """The GEOtop run of a case: <sims>/<case>, or <sims>/<case>_senza_chioma_corretta."""
+    for name in (case, case + "_senza_chioma_corretta"):
+        if os.path.isfile(os.path.join(sims, name, "geotop.inpts")):
+            return os.path.join(sims, name)
+    sys.exit(f"no GEOtop run of {case} in {sims}")
+
+
 def main():
     sims = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CANADA_SIMS")
     if not sims:
         sys.exit("usage: make_inputs.py <folder of the GEOtop runs>  (or set CANADA_SIMS)")
     for case in cases():
         site = case.split("_")[0]
-        src = os.path.join(sims, case + "_senza_chioma_corretta")
+        src = run_folder(sims, case)
         out = os.path.join(HERE, "geotop", case)
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(src, "meteo", "meteo0001.txt.old"), "rb") as fin, \
@@ -142,7 +150,7 @@ def main():
         reference(src, out)
         properties(site, out)
         print(case, "written")
-    runs = [os.path.join(sims, c + "_senza_chioma_corretta") for c in cases()]
+    runs = [run_folder(sims, c) for c in cases()]
     os.makedirs(os.path.join(HERE, "data"), exist_ok=True)
     subprocess.run([sys.executable, os.path.join(REPO, "tools", "geotop2case", "geotop2case.py"),
                     os.path.join(HERE, "data", "canada_ntgs.gpkg")] + runs

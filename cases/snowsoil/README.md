@@ -15,7 +15,7 @@ The build needs JDK 21 and Maven, and works offline:
 
 ```bash
 mvn -o -q compile                                   # or: mvn -o test
-mvn -o -q dependency:build-classpath -Dmdep.outputFile=cp.txt
+mvn -o -q dependency:build-classpath -Dmdep.outputFile=target/cp.txt
 ```
 
 In a git checkout the build writes `git describe --always --dirty --tags` to `target/classes/whetgeo1d-git-version.txt`. This is done by the pom profile `git-version` and becomes the code version in the header of every output.
@@ -37,7 +37,7 @@ Run it from the repository root. `oms-3.5.12.jar` must come **first** on the cla
 
 ```bash
 java -Doms.prj=$PWD/cases/snowsoil/synthetic_season \
-     -cp ~/.m2/repository/edu/colostate/omslab/oms/3.5.12/oms-3.5.12.jar:target/classes:$(cat cp.txt) \
+     -cp ~/.m2/repository/edu/colostate/omslab/oms/3.5.12/oms-3.5.12.jar:target/classes:$(cat target/cp.txt) \
      oms3.CLI -r cases/snowsoil/synthetic_season/snowsoil_synthetic_season.sim
 ```
 
@@ -193,7 +193,7 @@ The column runs in a `.sim` next to GEOframe components; what has been tried so 
   - **Static inputs:** a case GeoPackage (`caseFile`, `CaseGeoPackage`): points with slope, aspect, sky view factor and sensor heights, a horizon per point, the soil profiles and initial conditions, one row per 1D run in `columns`. The column takes its row with `caseColumn`. Without a GeoPackage the component also takes a station shapefile and a horizon OMS table, and the column its parameters.
   - **Choices of a run** on the same case: `caseGrid`, a named grid of the soil (0: the K cells per layer of `soil_layers`), and `caseInitialCondition`, the soil profile and the initial snow (0: the column's). Grids and initial snow are added with `tools/caseedit`; the grids are built by GEOframe's `WHETGEO1D_GridCreator`. The run header records both, and the initial snow as mass, energy and age.
   - **Initial snow:** one layer as GEOtop's `InitSWE`, `InitSnowDensity`, `InitSnowTemp`, `InitSnowAge` (written by `geotop2case`), or layers from a pit. The model turns them into its cells with the restratification of the configuration, conserving mass and energy (`InitialSnowpack`).
-  - **Check:** `java -cp target/classes:$(cat cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` lists what does not hold together (columns, coverage of the initial condition, parameters, grids, initial snow).
+  - **Check:** `java -cp target/classes:$(cat target/cp.txt) org.geoframe.whetgeo1d.io.snowsoil.CaseGeoPackage case.gpkg` lists what does not hold together (columns, coverage of the initial condition, parameters, grids, initial snow).
   - **Time series:** air temperature, humidity, pressure, and the cloud transmissivity or the measured global shortwave on the horizontal.
   - **What it computes,** as GEOtop 3.0 for a point:
     - Iqbal's clear sky times τ_c, split with Erbs;
