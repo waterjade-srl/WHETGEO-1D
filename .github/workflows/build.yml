@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - geo2geo
   pull_request:
     branches:
       - main
+      - geo2geo
   workflow_dispatch:
 
 permissions:
