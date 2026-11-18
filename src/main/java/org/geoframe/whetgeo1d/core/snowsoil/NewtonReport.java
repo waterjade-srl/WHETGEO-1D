@@ -21,7 +21,7 @@ package org.geoframe.whetgeo1d.core.snowsoil;
 /**
  * How the nonlinear solve of one heat step went. NestedNewtonThomas does not
  * report any of this (numerical 1.0.4): the counts come from
- * {@link IterationCountingEquationState} and the convergence flag from the
+ * {@link InstrumentedEquationState} and the convergence flag from the
  * per-cell check the driver does after the solve.
  *
  * @param outerIterations    outer residual evaluations, summed over the Picard
