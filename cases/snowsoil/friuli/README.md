@@ -134,15 +134,19 @@ Daily mean snow depth against the measurement, over the days with a measurement:
 
 | Station | RMSE, porting | RMSE, GEOtop 3.0 flat | Maximum depth, porting / measured | Snow gone, porting / measured |
 |---|---|---|---|---|
-| Chiansaveit | 0.29 m | 0.40 m | 1.34 / 1.52 m | 19/04 / 02/05 |
-| Sauris di sopra | 0.06 m | 0.13 m | 1.02 / 0.96 m | 06/04 / 02/04 |
+| Chiansaveit | 0.30 m | 0.40 m | 1.33 / 1.52 m | 19/04 / 02/05 |
+| Sauris di sopra | 0.06 m | 0.13 m | 1.00 / 0.96 m | 05/04 / 02/04 |
 | Sauris di sotto | 0.04 m | 0.09 m | 0.73 / 0.74 m | 17/03 / 27/03 |
-| Casera Pieltinis | 0.11 m | 0.17 m | 1.26 / 1.22 m | 13/04 / 16/04 |
+| Casera Pieltinis | 0.11 m | 0.17 m | 1.25 / 1.22 m | 12/04 / 16/04 |
 
 The snow appears on the same days as measured, within 0–8 days. At Chiansaveit the porting and GEOtop lose the
 pack two weeks early and stay 0.2–0.5 m low from March. NivoGEO-1D, with the same forcing, keeps it to the
 end of the season (RMSE 0.09 m with the terrain, 0.16 m flat), so undercatch at the stake alone does not
 explain it: part of the gap is in the energy balance.
+
+Shortwave penetration (SNOW-7) changes little here: without it (`SW=None`) the RMSE moves by at most 7 mm
+and the melt-out by at most one day; the broadband compounded scheme (`SW=Compounded`) is worse at three
+stations of four (RMSE up by 12–40 mm, 7 mm better at Sauris di sopra) and lowers the peak depth by 3–10 cm.
 
 ## On the terrain of the stations (the default)
 
@@ -179,8 +183,8 @@ Daily snow depth against the stake, operational run, next to the flat column of 
 
 | Station | RMSE | Melt-out, run / measured | Flat column |
 |---|---|---|---|
-| Chiansaveit (20° NNE) | 0.20 m | 26/04 / 02/05 | 0.29 m |
-| Sauris di sopra (0°) | 0.06 m | 04/04 / 02/04 | 0.07 m |
+| Chiansaveit (20° NNE) | 0.20 m | 26/04 / 02/05 | 0.30 m |
+| Sauris di sopra (0°) | 0.06 m | 03/04 / 02/04 | 0.06 m |
 | Sauris di sotto (11° SSW) | 0.10 m | 07/03 / 27/03 | 0.04 m |
 | Casera Pieltinis (12° SSE) | 0.20 m | 06/04 / 16/04 | 0.11 m |
 
