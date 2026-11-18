@@ -92,4 +92,31 @@ public class ShortwavePenetrationTest {
 		assertNull(ShortwavePenetration.COMPOUNDED.absorbed(List.of(), 100.0));
 		assertNull(ShortwavePenetration.NONE.absorbed(List.of(cell(200.0, 0.05), cell(200.0, 0.05)), 100.0));
 	}
+	/** VISIBLE: the visible goes into the pack and the soil, the near infrared stays at the surface. */
+	@Test
+	public void visibleKeepsTheNearInfraredAtTheSurface() {
+		List<SnowCell> snow = List.of(cell(320.0, 0.08), cell(250.0, 0.05), cell(150.0, 0.02));
+		double sum = 0.0;
+		for (double a : ShortwavePenetration.VISIBLE.absorbed(snow, 20.0, 60.0)) {
+			assertTrue(a >= 0.0);
+			sum += a;
+		}
+		assertEquals(20.0, sum, 1e-12);
+	}
+
+	/** Crocus's visible coefficient is smaller than GEOtop's k: the visible reaches deeper. */
+	@Test
+	public void crocusVisibleReachesDeeperThanGeotopK() {
+		List<SnowCell> snow = List.of(cell(300.0, 0.10), cell(250.0, 0.05), cell(200.0, 0.02));
+		double[] crocus = ShortwavePenetration.VISIBLE.absorbed(snow, 100.0, 0.0);
+		double[] geotop = ShortwavePenetration.COMPOUNDED.absorbed(snow, 100.0);
+		assertTrue(crocus[2] < geotop[2]);
+		// β1 = 40 m-1 at these densities: the top 2 cm absorb 1 - e^-0.8
+		assertEquals(100.0 * (1.0 - Math.exp(-0.8)), crocus[2], 1e-9);
+	}
+
+	@Test(expected = IllegalStateException.class)
+	public void spectralSchemesNeedTheBands() {
+		ShortwavePenetration.VISIBLE.absorbed(List.of(cell(200.0, 0.05), cell(200.0, 0.05)), 100.0);
+	}
 }

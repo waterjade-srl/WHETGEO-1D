@@ -96,7 +96,8 @@ public class TimeStepConvergenceTest {
 		Convergence c = convergence(Configuration.RECOMMENDED);
 		String detail = java.util.Arrays.toString(c.errors()) + " " + java.util.Arrays.toString(c.meltOutErrors());
 		assertTrue(detail, c.errors()[0] < 2.0);
-		assertTrue(detail, c.errors()[0] > 2.0 * c.errors()[1] && c.errors()[1] > 2.0 * c.errors()[2]);
+		// SNOW-7: the visible penetration makes the first halving 1.7, not 2
+		assertTrue(detail, c.errors()[0] > 1.5 * c.errors()[1] && c.errors()[1] > 1.5 * c.errors()[2]);
 		assertTrue(detail, c.meltOutErrors()[0] < 1.0 && c.meltOutErrors()[2] < 0.1);
 	}
 
