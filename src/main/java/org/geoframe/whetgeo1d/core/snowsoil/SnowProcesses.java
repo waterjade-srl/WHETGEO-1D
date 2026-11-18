@@ -145,7 +145,8 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 	 * without the rate limiter, GEOtop's mass
 	 * criterion with the 2 cm cap on the top cell, precipitation at the wet-bulb
 	 * temperature, the skin node held at 0 °C over snow ({@link SkinNode#CAPPED},
-	 * SURF-2). The open choices of document 008 keep GEOtop's behaviour
+	 * SURF-2), the visible shortwave absorbed in the cells and the near infrared
+	 * at the skin ({@link ShortwavePenetration#VISIBLE}, SNOW-7). The open choices of document 008 keep GEOtop's behaviour
 	 * (thickness unchanged by sublimation).
 	 */
 	public static SnowProcesses recommended(SnowEquationOfState eos, double windHeight, double temperatureHeight) {
@@ -159,9 +160,8 @@ public record SnowProcesses(SnowEquationOfState equationOfState, SurfaceEnergyBa
 						new MassCriterionRestratification(MassCriterionRestratification.Parameters.geotopDefaults(), eos),
 						TopCellThicknessCap.DEFAULT_MAX_THICKNESS, eos),
 				PrecipitationTemperature.WET_BULB, SurfaceCoupling.implicit(), ThinSnow.none(), SkinNode.CAPPED,
-				// SNOW-7: COMPOUNDED agreed, off for now: with the 2 cm surface cell it does not converge in the
-				// time step at hourly steps (the surface cell melts under a cold skin); to be revised
-				ShortwavePenetration.NONE);
+				// SNOW-7: the near infrared at the skin, the visible compounded in the cells
+				ShortwavePenetration.VISIBLE);
 	}
 
 	/** Same processes with another restratification policy. */

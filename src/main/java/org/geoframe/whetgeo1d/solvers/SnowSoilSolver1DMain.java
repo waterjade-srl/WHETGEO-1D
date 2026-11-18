@@ -690,7 +690,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public String skinNode = "";
 
-	@Description("Shortwave absorbed below the snow surface (SNOW-7): None, Geotop (extinction of each cell on the cumulative depth) or Compounded; empty: Geotop in fidelity, None in recommended (Compounded is agreed but off for now: it does not converge in the time step at hourly steps).")
+	@Description("Shortwave absorbed below the snow surface (SNOW-7): None, Geotop (extinction of each cell on the cumulative depth), Compounded (all the net shortwave, compounded cell by cell) or Visible (the near infrared at the surface, the visible compounded cell by cell); empty: Geotop in fidelity, Visible in recommended.")
 	@In
 	public String shortwavePenetration = "";
 

@@ -126,6 +126,17 @@ public final class SnowAlbedo {
 					+ shortwaveDirect * (1.0 - 0.5 * visibleDirect - 0.5 * nearInfraredDirect);
 		}
 
+		/** Visible shortwave absorbed by the surface, half of the incident [W m-2]. */
+		public double absorbedVisible(double shortwaveDirect, double shortwaveDiffuse) {
+			return 0.5 * (shortwaveDiffuse * (1.0 - visibleDiffuse) + shortwaveDirect * (1.0 - visibleDirect));
+		}
+
+		/** Near-infrared shortwave absorbed by the surface, half of the incident [W m-2]. */
+		public double absorbedNearInfrared(double shortwaveDirect, double shortwaveDiffuse) {
+			return 0.5 * (shortwaveDiffuse * (1.0 - nearInfraredDiffuse)
+					+ shortwaveDirect * (1.0 - nearInfraredDirect));
+		}
+
 		/** Shortwave reflected by the surface [W m-2]. */
 		public double reflected(double shortwaveDirect, double shortwaveDiffuse) {
 			return shortwaveDiffuse * (0.5 * visibleDiffuse + 0.5 * nearInfraredDiffuse)

@@ -581,6 +581,7 @@ public final class SnowSoilSolver {
 		SurfaceEnergyBalance balance = null;
 		double startTemperature = Double.NaN;
 		double albedo = Double.NaN;
+		double netVisible = 0.0;
 		TopBoundary top = null;
 		double pendingApplied = 0.0;
 		boolean imposedSnowTop = snowAtStart && forcing.snowTop() != null;
@@ -606,6 +607,8 @@ public final class SnowSoilSolver {
 					forcing.surface().cosIncidence(), forcing.groundAlbedoVisible(),
 					forcing.groundAlbedoNearInfrared());
 			albedo = albedos.broadband(forcing.surface().shortwaveDirect(), forcing.surface().shortwaveDiffuse());
+			netVisible = albedos.absorbedVisible(forcing.surface().shortwaveDirect(),
+					forcing.surface().shortwaveDiffuse());
 			// GEOtop's thin-snow regime (fidelity): soil roughness and emissivity under a thin pack
 			double depth = SnowColumn.depth(start);
 			balance = SurfaceEnergyBalance.atStartOfStep(
@@ -632,8 +635,9 @@ public final class SnowSoilSolver {
 		if (snowAtStart && !imposedSnowTop) {
 			SurfaceEnergyBalance snowBalance = balance;
 			// SNOW-7: the shortwave absorbed inside the pack leaves the surface balance for the cells
-			double[] absorbed = processes.shortwavePenetration().absorbed(start,
-					balance.evaluate(startTemperature).netShortwave());
+			double netShortwave = balance.evaluate(startTemperature).netShortwave();
+			double[] absorbed = processes.shortwavePenetration().absorbed(start, netVisible,
+					netShortwave - netVisible);
 			TopBoundary.Balance surfaceBalance = snowBalance::evaluate;
 			if (absorbed != null) {
 				int nSoil = heat.soilCells();

@@ -35,7 +35,7 @@ Details, tables and figures: the READMEs of the cases and the notebooks.
 - The `fidelity` package (GEOtop forcing files, snow keywords) is a temporary test harness, not part of the model.
 - The initial snow has not yet been compared with GEOtop in the fidelity configuration (ARF_1D has 23.78 mm at the start).
 - GridCreator's `mixed` grids leave cells much thinner than `dz_min` at the faces of the layers.
-- Delayed refreezing of GEOtop (STA-3) is not ported; the compounded shortwave penetration of the recommended configuration is off (it does not converge at hourly steps, SNOW-7).
+- Delayed refreezing of GEOtop (STA-3) is not ported. In the recommended configuration only the visible shortwave penetrates the pack, the near infrared stays at the surface (SNOW-7): the broadband compounded penetration does not converge at hourly steps under the 2 cm surface cell.
 - Open in the design: SOL-3 (three changes to Numerical, worked around), VAL-5 (who validates the parked WHETGEO-1D tests), ORG-4 (technical meeting with the library maintainer); ARCH-10 and VAL-3 are proposed.
 - No vegetation (SCOPE-1), no glacier (SCOPE-2), 1D only.
 
