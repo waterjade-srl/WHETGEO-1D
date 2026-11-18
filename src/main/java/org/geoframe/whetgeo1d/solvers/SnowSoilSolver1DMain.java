@@ -406,13 +406,16 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Unit("°C")
 	public double snowThreshold = -1.0;
 
-	@Description("Kavetski: melting temperature, smoothing, rain and snow correction factors.")
+	@Description("Kavetski partition: temperature of half rain, half snow, above the melting point.")
 	@In
 	public double kavetskiMeltingTemperature = 0.0;
+	@Description("Kavetski partition: smoothing of the transition from snow to rain [K].")
 	@In
 	public double kavetskiSmoothing = 1.0;
+	@Description("Kavetski partition: correction factor of the rainfall (gauge undercatch).")
 	@In
 	public double rainCorrection = 1.0;
+	@Description("Kavetski partition: correction factor of the snowfall (gauge undercatch).")
 	@In
 	public double snowCorrection = 1.0;
 
@@ -444,54 +447,76 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public String soilGridFile = "";
 
+	@Description("Vertical coordinate of the cell centroids, zero at the soil surface, negative in the soil (when soilGridFile is empty).")
 	@In
 	@Unit("m")
 	public double[] eta;
+	@Description("z coordinate of the cell centroids, from the bottom of the column (when soilGridFile is empty).")
 	@In
 	@Unit("m")
 	public double[] z;
+	@Description("Distance between the centroids, for the gradients (when soilGridFile is empty).")
 	@In
 	@Unit("m")
 	public double[] spaceDeltaZ;
+	@Description("Thickness of the cells (when soilGridFile is empty).")
 	@In
 	@Unit("m")
 	public double[] controlVolume;
+	@Description("Initial water suction of the cells (when soilGridFile is empty).")
 	@In
 	@Unit("m")
 	public double[] psiIC;
+	@Description("Initial temperature of the cells (when soilGridFile is empty).")
 	@In
 	@Unit("K")
 	public double[] temperature;
+	@Description("Equation-state id of each cell (when soilGridFile is empty).")
 	@In
 	public int[] inEquationStateID;
+	@Description("Parameter-set id of each cell (when soilGridFile is empty).")
 	@In
 	public int[] inParameterID;
+	@Description("Hydraulic conductivity at saturation, per parameter set [m s-1].")
 	@In
 	public double[] ks;
+	@Description("Saturated water content, per parameter set [-].")
 	@In
 	public double[] thetaS;
+	@Description("Residual water content, per parameter set [-].")
 	@In
 	public double[] thetaR;
+	@Description("First parameter of the retention curve, per parameter set (van Genuchten n).")
 	@In
 	public double[] par1SWRC;
+	@Description("Second parameter of the retention curve, per parameter set (van Genuchten alpha [m-1]).")
 	@In
 	public double[] par2SWRC;
+	@Description("Third parameter of the retention curve, per parameter set.")
 	@In
 	public double[] par3SWRC;
+	@Description("Fourth parameter of the retention curve, per parameter set.")
 	@In
 	public double[] par4SWRC;
+	@Description("Fifth parameter of the retention curve, per parameter set.")
 	@In
 	public double[] par5SWRC;
+	@Description("Compressibility of the soil matrix, per parameter set [Pa-1].")
 	@In
 	public double[] alphaSpecificStorage;
+	@Description("Compressibility of water, per parameter set [Pa-1].")
 	@In
 	public double[] betaSpecificStorage;
+	@Description("Density of the soil particles, per parameter set [kg m-3].")
 	@In
 	public double[] soilParticlesDensity;
+	@Description("Specific heat capacity of the soil particles, per parameter set [J kg-1 K-1].")
 	@In
 	public double[] specificThermalCapacitySoilParticles;
+	@Description("Thermal conductivity of the soil particles, per parameter set [W m-1 K-1].")
 	@In
 	public double[] thermalConductivitySoilParticles;
+	@Description("Melting temperature of the soil water, per parameter set [K].")
 	@In
 	public double[] meltingTemperature;
 
@@ -510,32 +535,41 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Unit("K")
 	public double referenceTemperatureSWRC = 278.15;
 
-	@Description("Heat closures of the soil, per equation-state id.")
+	@Description("Heat closures of the soil, per equation-state id: the freezing curve.")
 	@In
 	public String[] typeClosureEquation = { "Van Genuchten Dall Amico" };
+	@Description("Heat closures of the soil, per equation-state id: the equation of state of the internal energy.")
 	@In
 	public String[] typeEquationState = { "FreezingSoilInternalEnergy" };
+	@Description("Heat closures of the soil, per equation-state id: the thermal conductivity model.")
 	@In
 	public String[] typeThermalConductivity = { "Cosenza" };
+	@Description("Thermal conductivity at the faces between cells (WHETGEO-1D models).")
 	@In
 	public String interfaceThermalConductivityModel = "Weighted Harmonic Mean";
 
-	@Description("Water closures of the soil, per equation-state id.")
+	@Description("Water closures of the soil, per equation-state id: the retention curve.")
 	@In
 	public String[] typeWaterClosureEquation = { "Van Genuchten" };
+	@Description("Water closures of the soil, per equation-state id: the equation of state of the water content.")
 	@In
 	public String[] typeWaterEquationState = { "Van Genuchten" };
+	@Description("Water closures of the soil, per equation-state id: the unsaturated hydraulic conductivity model.")
 	@In
 	public String[] typeUHCModel = { "Mualem Van Genuchten" };
+	@Description("Temperature correction of the hydraulic conductivity (WHETGEO-1D models; notemperature: none).")
 	@In
 	public String typeUHCTemperatureModel = "notemperature";
 	@Description("Conductivity of the faces of Richards: WHETGEO's (max, min, arithmetic mean, ...) or GEOtop (upwind cell capped by the saturated conductivities with ice, viscosity correction); empty: GEOtop in fidelity, max in recommended.")
 	@In
 	public String interfaceHydraulicConductivityModel = "";
+	@Description("Tolerance of the Nested Newton of Richards [m].")
 	@In
 	public double waterNewtonTolerance = 1e-11;
+	@Description("Maximum iterations of the Nested Newton of Richards.")
 	@In
 	public int waterMaxIterations = 50;
+	@Description("Longest substep of Richards inside a step.")
 	@In
 	@Unit("s")
 	public double waterMaxSubstep = 1800.0;
@@ -563,11 +597,13 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Energy Balance top: emissivity of the bare soil (GEOtop SoilEmissiv).")
 	@In
 	public double soilEmissivity = 0.96;
-	@Description("Energy Balance top: albedo of the saturated soil, visible and near infrared; NaN: the dry ones (groundAlbedo, groundAlbedoNearInfrared).")
+	@Description("Energy Balance top: visible albedo of the saturated soil; NaN: the dry one (groundAlbedo).")
 	@In
 	public double groundAlbedoWet = Double.NaN;
+	@Description("Energy Balance top: near-infrared albedo of the saturated soil; NaN: the dry one (groundAlbedoNearInfrared).")
 	@In
 	public double groundAlbedoNearInfraredWet = Double.NaN;
+	@Description("Series of the bare-soil top value (temperature [°C] or flux [W m-2]) by stationID, in place of the constant bareSoilTopValue.")
 	@In
 	public Map<Integer, double[]> inTopBC;
 
@@ -577,6 +613,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Constant value of the snow top: temperature [°C, capped at 0] or flux into the snow [W m-2].")
 	@In
 	public double snowTopValue = Double.NaN;
+	@Description("Series of the snow-top value by stationID, in place of the constant snowTopValue.")
 	@In
 	public Map<Integer, double[]> inSnowTopBC;
 
@@ -586,14 +623,17 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Constant value at the bottom: temperature [°C] or flux into the column [W m-2].")
 	@In
 	public double bottomBCValue = 0.0;
+	@Description("Series of the bottom heat value by stationID, in place of the constant bottomBCValue.")
 	@In
 	public Map<Integer, double[]> inBottomBC;
 
 	@Description("Bottom of Richards: any of WHETGEO-1D's (Bottom Free Drainage, Bottom Impervious, Bottom Dirichlet, ...).")
 	@In
 	public String soilWaterBottomType = "Bottom Free Drainage";
+	@Description("Constant value at the bottom of Richards: suction [m] (Dirichlet) or flux, as the bottom type requires.")
 	@In
 	public double soilWaterBottomValue = 0.0;
+	@Description("Series of the bottom value of Richards by stationID, in place of the constant soilWaterBottomValue.")
 	@In
 	public Map<Integer, double[]> inSoilWaterBottomBC;
 
@@ -611,42 +651,55 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Unit("s")
 	public double tTimeStep = 3600.0;
 
+	@Description("Air temperature by stationID.")
 	@In
 	@Unit("°C")
 	public Map<Integer, double[]> inAirTemperature;
+	@Description("Relative humidity of the air by stationID.")
 	@In
 	@Unit("%")
 	public Map<Integer, double[]> inRelativeHumidity;
+	@Description("Wind speed by stationID, at windHeight.")
 	@In
 	@Unit("m s-1")
 	public Map<Integer, double[]> inWindSpeed;
+	@Description("Air pressure by stationID; missing: from the elevation.")
 	@In
 	@Unit("Pa")
 	public Map<Integer, double[]> inPressure;
+	@Description("Global shortwave on the horizontal by stationID, split into beam and diffuse when those are missing.")
 	@In
 	@Unit("W m-2")
 	public Map<Integer, double[]> inShortwaveGlobal;
+	@Description("Beam shortwave by stationID (on the horizontal, or on the slope from TerrainShortwaveMain).")
 	@In
 	@Unit("W m-2")
 	public Map<Integer, double[]> inShortwaveDirect;
+	@Description("Diffuse shortwave by stationID (on the horizontal, or on the slope from TerrainShortwaveMain).")
 	@In
 	@Unit("W m-2")
 	public Map<Integer, double[]> inShortwaveDiffuse;
+	@Description("Incoming longwave by stationID; missing: estimated from air temperature, humidity and cloud transmissivity.")
 	@In
 	@Unit("W m-2")
 	public Map<Integer, double[]> inLongwaveIn;
+	@Description("Cloud transmissivity by stationID: with no shortwave measured it scales the clear-sky shortwave; it also enters the incoming longwave. Missing: from the measured shortwave.")
 	@In
 	@Unit("-")
 	public Map<Integer, double[]> inCloudTransmissivity;
+	@Description("Total precipitation in the step by stationID, split into rain and snow by the partition.")
 	@In
 	@Unit("mm")
 	public Map<Integer, double[]> inPrecipitation;
+	@Description("Rainfall in the step by stationID, already split (with inSnowfall, in place of inPrecipitation).")
 	@In
 	@Unit("mm")
 	public Map<Integer, double[]> inRainfall;
+	@Description("Snowfall in the step by stationID, as water equivalent, already split.")
 	@In
 	@Unit("mm")
 	public Map<Integer, double[]> inSnowfall;
+	@Description("Temperature of the precipitation by stationID; where given it replaces the wet-bulb temperature of the configuration's rule, within the same limits at 0 °C.")
 	@In
 	@Unit("°C")
 	public Map<Integer, double[]> inPrecipitationTemperature;
@@ -714,41 +767,54 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@In
 	public String resumeFrom = "";
 
+	@Description("Snow water equivalent at the end of the step.")
 	@Out
 	@Unit("kg m-2")
 	public double outSnowWaterEquivalent;
+	@Description("Snow depth at the end of the step.")
 	@Out
 	@Unit("m")
 	public double outSnowDepth;
+	@Description("Number of snow cells at the end of the step.")
 	@Out
 	public int outSnowCells;
+	@Description("Surface (skin) temperature of the step.")
 	@Out
 	@Unit("K")
 	public double outSurfaceTemperature;
+	@Description("Temperature of the soil cells at the end of the step.")
 	@Out
 	@Unit("K")
 	public double[] outSoilTemperature;
+	@Description("Water suction of the soil cells at the end of the step.")
 	@Out
 	@Unit("m")
 	public double[] outSoilSuction;
+	@Description("Ice content of the soil cells at the end of the step.")
 	@Out
 	@Unit("-")
 	public double[] outSoilIce;
+	@Description("Water entering the soil at its surface in the step (rain and melt).")
 	@Out
 	@Unit("kg m-2")
 	public double outSoilInput;
+	@Description("Rainfall used in the step, after the partition.")
 	@Out
 	@Unit("kg m-2")
 	public double outRainfall;
+	@Description("Snowfall used in the step, after the partition, as water equivalent.")
 	@Out
 	@Unit("kg m-2")
 	public double outSnowfall;
+	@Description("Air pressure used in the step, measured or from the elevation.")
 	@Out
 	@Unit("Pa")
 	public double outPressure;
+	@Description("Incoming longwave used in the step, measured or estimated.")
 	@Out
 	@Unit("W m-2")
 	public double outLongwaveIn;
+	@Description("Cloud transmissivity used in the step.")
 	@Out
 	@Unit("-")
 	public double outCloudTransmissivity;
@@ -756,6 +822,7 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Shortwave on the horizontal used in the step, beam plus diffuse, measured or estimated.")
 	@Unit("W m-2")
 	public double outShortwaveGlobal;
+	@Description("Full result of the step (snow cells, budgets, diagnostics), for the writers.")
 	@Out
 	public SnowSoilStepResult outStepResult;
 	@Description("Bare-soil surface fluxes of the step at its final top temperature, with the Energy Balance top and no snow; null otherwise.")
@@ -767,8 +834,10 @@ public class SnowSoilSolver1DMain extends HMModel {
 	@Description("Heat flux into the soil at its surface in the step [W m-2, positive downwards], keyed by stationID, for GEOET (the G of Penman-Monteith); -9999 with snow on the ground.")
 	@Out
 	public HashMap<Integer, double[]> outSoilHeatFlux;
+	@Description("Header of the run (configuration, grid, station), for the writers.")
 	@Out
 	public RunHeader outRunHeader;
+	@Description("Diagnostics of the run so far (balances, iterations, step rejections), for the writers.")
 	@Out
 	public RunDiagnostics outRunDiagnostics;
 
