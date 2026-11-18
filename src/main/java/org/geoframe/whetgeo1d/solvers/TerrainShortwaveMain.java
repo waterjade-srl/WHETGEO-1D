@@ -133,23 +133,27 @@ public class TerrainShortwaveMain extends HMModel {
 	@In
 	public String horizonFile = "";
 
+	@Description("Latitude of the point, north positive (when no caseFile or stations file gives it).")
 	@In
 	@Unit("deg")
 	public double latitude;
-	@Description("East positive.")
+	@Description("Longitude of the point, east positive.")
 	@In
 	@Unit("deg")
 	public double longitude;
+	@Description("Elevation of the point (when no caseFile or stations file gives it).")
 	@In
 	@Unit("m")
 	public double elevation = 0.0;
+	@Description("Slope of the surface from the horizontal (when no caseFile or stations file gives it).")
 	@In
 	@Unit("deg")
 	public double slope = 0.0;
-	@Description("From north, clockwise.")
+	@Description("Aspect of the slope, from north, clockwise.")
 	@In
 	@Unit("deg")
 	public double aspect = 0.0;
+	@Description("Sky view factor of the point (when no caseFile or stations file gives it).")
 	@In
 	@Unit("-")
 	public double skyViewFactor = 1.0;
@@ -166,20 +170,23 @@ public class TerrainShortwaveMain extends HMModel {
 	@In
 	public String inCurrentDate;
 
+	@Description("Air temperature by stationID, for the clear-sky transmissivity.")
 	@In
 	@Unit("°C")
 	public Map<Integer, double[]> inAirTemperature;
+	@Description("Relative humidity by stationID, for the clear-sky transmissivity.")
 	@In
 	@Unit("%")
 	public Map<Integer, double[]> inRelativeHumidity;
-	@Description("Missing: the standard atmosphere at the elevation.")
+	@Description("Air pressure by stationID; missing: the standard atmosphere at the elevation.")
 	@In
 	@Unit("Pa")
 	public Map<Integer, double[]> inPressure;
+	@Description("Cloud transmissivity by stationID, scaling the clear-sky shortwave; missing: from inShortwaveGlobal.")
 	@In
 	@Unit("-")
 	public Map<Integer, double[]> inCloudTransmissivity;
-	@Description("Measured on the horizontal, used where no cloud transmissivity is given.")
+	@Description("Global shortwave by stationID, measured on the horizontal, used where no cloud transmissivity is given.")
 	@In
 	@Unit("W m-2")
 	public Map<Integer, double[]> inShortwaveGlobal;
